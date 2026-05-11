@@ -26,17 +26,20 @@ class PostgresRepositoryImpl: PlantRepository {
     }
 
     override suspend fun deletePlant(plantId: Int) {
-        transaction {
+        val deletedRows = transaction {
             PlantsTable.deleteWhere {
                 PlantsTable.id eq plantId
             }
+        }
+        if (deletedRows == 0) {
+            throw NoSuchElementException("Plant with id $plantId was not found")
         }
     }
 
     override suspend fun updatePlant(plant: Plant) {
         val id = plant.id ?: error("Can't update plant without id")
 
-        transaction {
+        val updatedRows = transaction {
             PlantsTable.update({ PlantsTable.id eq id }) {
                 it[apiId] = plant.apiId
                 it[commonName] = plant.commonName
@@ -45,6 +48,9 @@ class PostgresRepositoryImpl: PlantRepository {
                 it[thumbnailUrl] = plant.thumbnailUrl
                 it[description] = plant.description
             }
+        }
+        if (updatedRows == 0) {
+            throw NoSuchElementException("Plant with id $id was not found")
         }
     }
 

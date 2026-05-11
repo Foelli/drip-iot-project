@@ -1,6 +1,8 @@
 package plant.data.database
 
 import io.ktor.server.config.ApplicationConfig
+import org.jetbrains.exposed.v1.jdbc.SchemaUtils
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.Database
 
 object DatabaseFactory {
@@ -31,5 +33,10 @@ object DatabaseFactory {
             user = dbUser,
             password = dbPassword
         )
+
+        // Minimal startup schema init for local/dev. Consider Flyway/Liquibase later.
+        transaction {
+            SchemaUtils.createMissingTablesAndColumns(PlantsTable)
+        }
     }
 }

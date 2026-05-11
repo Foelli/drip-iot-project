@@ -54,17 +54,46 @@ fun Application.configureRouting(
                     ?: return@put call.respond(HttpStatusCode.BadRequest, "Invalid id")
 
                 val req = call.receive<UpdatePlantRequest>()
+                val commonName = req.commonName
+                    ?: return@put call.respond(
+                        HttpStatusCode.BadRequest,
+                        "PUT /plants/{id} requires all fields; missing commonName"
+                    )
+                val scientificName = req.scientificName
+                    ?: return@put call.respond(
+                        HttpStatusCode.BadRequest,
+                        "PUT /plants/{id} requires all fields; missing scientificName"
+                    )
+                val customName = req.customName
+                    ?: return@put call.respond(
+                        HttpStatusCode.BadRequest,
+                        "PUT /plants/{id} requires all fields; missing customName"
+                    )
+                val thumbnailUrl = req.thumbnailUrl
+                    ?: return@put call.respond(
+                        HttpStatusCode.BadRequest,
+                        "PUT /plants/{id} requires all fields; missing thumbnailUrl"
+                    )
+                val description = req.description
+                    ?: return@put call.respond(
+                        HttpStatusCode.BadRequest,
+                        "PUT /plants/{id} requires all fields; missing description"
+                    )
                 val plant = Plant(
                     id = id,
                     apiId = req.apiId,
-                    commonName = req.commonName,
-                    scientificName = req.scientificName,
-                    customName = req.customName,
-                    thumbnailUrl = req.thumbnailUrl,
-                    description = req.description,
+                    commonName = commonName,
+                    scientificName = scientificName,
+                    customName = customName,
+                    thumbnailUrl = thumbnailUrl,
+                    description = description,
                 )
-                updatePlantUseCase(plant)
-                call.respond(HttpStatusCode.NoContent)
+                try {
+                    updatePlantUseCase(plant)
+                    call.respond(HttpStatusCode.NoContent)
+                } catch (e: NoSuchElementException) {
+                    call.respond(HttpStatusCode.NotFound, e.message ?: "Not found")
+                }
             }
 
             // DELETE /plants/{id}
@@ -72,8 +101,12 @@ fun Application.configureRouting(
                 val id = call.parameters["id"]?.toIntOrNull()
                     ?: return@delete call.respond(HttpStatusCode.BadRequest, "Invalid id")
 
-                deletePlantUseCase(id)
-                call.respond(HttpStatusCode.NoContent)
+                try {
+                    deletePlantUseCase(id)
+                    call.respond(HttpStatusCode.NoContent)
+                } catch (e: NoSuchElementException) {
+                    call.respond(HttpStatusCode.NotFound, e.message ?: "Not found")
+                }
             }
         }
     }
