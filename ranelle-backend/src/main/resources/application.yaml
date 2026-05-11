@@ -1,6 +1,14 @@
 ktor:
     application:
         modules:
-            - com.example.com.ApplicationKt.module
+            - web.ApplicationKt.module
     deployment:
+        host: 127.0.0.1
         port: 8080
+
+database:
+    host: ${?POSTGRES_HOST}
+    port: ${?POSTGRES_PORT}
+    name: ${?POSTGRES_DB}
+    user: ${?POSTGRES_USER}
+    password: ${?POSTGRES_PASSWORD}
