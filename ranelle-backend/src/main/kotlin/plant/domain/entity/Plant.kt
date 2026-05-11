@@ -1,5 +1,8 @@
 package plant.domain.entity
 
+import kotlinx.serialization.Serializable
+
+@Serializable
 data class Plant(
 
     // Internal unique plant id
