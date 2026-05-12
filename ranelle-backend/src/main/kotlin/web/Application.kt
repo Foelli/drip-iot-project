@@ -9,6 +9,7 @@ import plant.data.database.DatabaseFactory
 import plant.data.repository.PostgresRepositoryImpl
 import plant.domain.usecase.AddPlantUseCase
 import plant.domain.usecase.DeletePlantUseCase
+import plant.domain.usecase.GetPlantByIdUseCase
 import plant.domain.usecase.GetPlantsUseCase
 import plant.domain.usecase.UpdatePlantUseCase
 import web.routing.configureRouting
@@ -29,6 +30,7 @@ fun Application.module() {
 
     configureRouting(
         getPlantsUseCase = GetPlantsUseCase(repository = repository, dispatcher = dispatcher),
+        getPlantByIdUseCase = GetPlantByIdUseCase(dispatcher = dispatcher, repository = repository),
         addPlantUseCase = AddPlantUseCase(dispatcher = dispatcher, repository = repository),
         updatePlantUseCase = UpdatePlantUseCase(dispatcher = dispatcher, repository = repository),
         deletePlantUseCase = DeletePlantUseCase(dispatcher = dispatcher, repository = repository),

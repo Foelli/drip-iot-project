@@ -8,6 +8,7 @@ import io.ktor.server.routing.*
 import plant.domain.entity.Plant
 import plant.domain.usecase.AddPlantUseCase
 import plant.domain.usecase.DeletePlantUseCase
+import plant.domain.usecase.GetPlantByIdUseCase
 import plant.domain.usecase.GetPlantsUseCase
 import plant.domain.usecase.UpdatePlantUseCase
 import web.dto.CreatePlantRequest
@@ -15,6 +16,7 @@ import web.dto.UpdatePlantRequest
 
 fun Application.configureRouting(
     getPlantsUseCase: GetPlantsUseCase,
+    getPlantByIdUseCase: GetPlantByIdUseCase,
     addPlantUseCase: AddPlantUseCase,
     updatePlantUseCase: UpdatePlantUseCase,
     deletePlantUseCase: DeletePlantUseCase
@@ -53,45 +55,30 @@ fun Application.configureRouting(
                 val id = call.parameters["id"]?.toIntOrNull()
                     ?: return@put call.respond(HttpStatusCode.BadRequest, "Invalid id")
 
+                // Fetch first so we can preserve immutable fields (apiId) and
+                // return a clean 404 before touching the request body.
+                val existing = getPlantByIdUseCase(id)
+                    ?: return@put call.respond(
+                        HttpStatusCode.NotFound,
+                        "Plant with id $id was not found"
+                    )
+
+                // Required fields are non-nullable on `UpdatePlantRequest`, so
+                // kotlinx.serialization rejects incomplete payloads before
+                // this line — no per-field null guards needed.
                 val req = call.receive<UpdatePlantRequest>()
-                val commonName = req.commonName
-                    ?: return@put call.respond(
-                        HttpStatusCode.BadRequest,
-                        "PUT /plants/{id} requires all fields; missing commonName"
-                    )
-                val scientificName = req.scientificName
-                    ?: return@put call.respond(
-                        HttpStatusCode.BadRequest,
-                        "PUT /plants/{id} requires all fields; missing scientificName"
-                    )
-                val customName = req.customName
-                    ?: return@put call.respond(
-                        HttpStatusCode.BadRequest,
-                        "PUT /plants/{id} requires all fields; missing customName"
-                    )
-                val thumbnailUrl = req.thumbnailUrl
-                    ?: return@put call.respond(
-                        HttpStatusCode.BadRequest,
-                        "PUT /plants/{id} requires all fields; missing thumbnailUrl"
-                    )
-                val description = req.description
-                    ?: return@put call.respond(
-                        HttpStatusCode.BadRequest,
-                        "PUT /plants/{id} requires all fields; missing description"
-                    )
-                val plant = Plant(
-                    id = id,
-                    apiId = req.apiId,
-                    commonName = commonName,
-                    scientificName = scientificName,
-                    customName = customName,
-                    thumbnailUrl = thumbnailUrl,
-                    description = description,
+                val updated = existing.copy(
+                    commonName = req.commonName,
+                    scientificName = req.scientificName,
+                    customName = req.customName,
+                    thumbnailUrl = req.thumbnailUrl,
+                    description = req.description,
                 )
                 try {
-                    updatePlantUseCase(plant)
+                    updatePlantUseCase(updated)
                     call.respond(HttpStatusCode.NoContent)
                 } catch (e: NoSuchElementException) {
+                    // Race: plant deleted between fetch and update.
                     call.respond(HttpStatusCode.NotFound, e.message ?: "Not found")
                 }
             }
