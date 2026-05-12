@@ -10,4 +10,6 @@ interface PlantRepository {
     suspend fun updatePlant(plant: Plant)
 
     suspend fun getAllPlants(): List<Plant>
+
+    suspend fun findById(plantId: Int): Plant?
 }

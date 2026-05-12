@@ -62,6 +62,16 @@ class PostgresRepositoryImpl: PlantRepository {
         }
     }
 
+    override suspend fun findById(plantId: Int): Plant? {
+        return transaction {
+            PlantsTable
+                .selectAll()
+                .where { PlantsTable.id eq plantId }
+                .map(::rowToPlant)
+                .singleOrNull()
+        }
+    }
+
     private fun rowToPlant(row: ResultRow): Plant {
         return Plant(
             id = row[PlantsTable.id],
