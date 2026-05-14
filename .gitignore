@@ -34,3 +34,6 @@ out/
 
 ### VS Code ###
 .vscode/
+
+# Local planning docs (not part of the product docs yet)
+docs/PROJECT_SPEC.md
