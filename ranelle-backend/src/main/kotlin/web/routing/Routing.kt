@@ -5,6 +5,7 @@ import io.ktor.server.application.*
 import io.ktor.server.request.receive
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import kotlinx.serialization.Serializable
 import plant.domain.entity.Plant
 import plant.domain.usecase.AddPlantUseCase
 import plant.domain.usecase.DeletePlantUseCase
@@ -14,6 +15,9 @@ import plant.domain.usecase.UpdatePlantUseCase
 import web.dto.CreatePlantRequest
 import web.dto.UpdatePlantRequest
 
+@Serializable
+data class MessageResponse(val message: String)
+
 fun Application.configureRouting(
     getPlantsUseCase: GetPlantsUseCase,
     getPlantByIdUseCase: GetPlantByIdUseCase,
@@ -22,8 +26,13 @@ fun Application.configureRouting(
     deletePlantUseCase: DeletePlantUseCase
 ) {
     routing {
-        get("/") {
+        get("/api/v1") {
             call.respondText("This is v1.0.0 of the YAPS")
+        }
+
+        // Simple health endpoint
+        get("/health") {
+            call.respond(HttpStatusCode.OK, "ok")
         }
 
         route("/plants") {
