@@ -39,9 +39,13 @@ class PostgresRepositoryImpl: PlantRepository {
     override suspend fun updatePlant(plant: Plant) {
         val id = plant.id ?: error("Can't update plant without id")
 
+        // `apiId` is intentionally omitted: a plant's link to the external
+        // catalog is set at creation and treated as immutable. Excluding it
+        // here mirrors the omission on `UpdatePlantRequest` as defense in
+        // depth — even if a caller passes a `Plant` with a different apiId,
+        // the column will not be touched.
         val updatedRows = transaction {
             PlantsTable.update({ PlantsTable.id eq id }) {
-                it[apiId] = plant.apiId
                 it[commonName] = plant.commonName
                 it[scientificName] = plant.scientificName
                 it[customName] = plant.customName
@@ -59,6 +63,16 @@ class PostgresRepositoryImpl: PlantRepository {
             PlantsTable
                 .selectAll()
                 .map(::rowToPlant)
+        }
+    }
+
+    override suspend fun findById(plantId: Int): Plant? {
+        return transaction {
+            PlantsTable
+                .selectAll()
+                .where { PlantsTable.id eq plantId }
+                .map(::rowToPlant)
+                .singleOrNull()
         }
     }
 
