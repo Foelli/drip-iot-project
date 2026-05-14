@@ -15,9 +15,6 @@ import plant.domain.usecase.UpdatePlantUseCase
 import web.dto.CreatePlantRequest
 import web.dto.UpdatePlantRequest
 
-@Serializable
-data class MessageResponse(val message: String)
-
 fun Application.configureRouting(
     getPlantsUseCase: GetPlantsUseCase,
     getPlantByIdUseCase: GetPlantByIdUseCase,
