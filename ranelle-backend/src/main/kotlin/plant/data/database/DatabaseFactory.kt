@@ -1,31 +1,30 @@
 package plant.data.database
 
 import io.ktor.server.config.ApplicationConfig
+import java.nio.file.Files
+import java.nio.file.Path
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.Database
 
 object DatabaseFactory {
     fun init(config: ApplicationConfig) {
-        val dbHost = config.propertyOrNull("database.host")?.getString()
-            ?: System.getenv("POSTGRES_HOST")
+        val dotEnv = loadDotEnv()
+
+        val dbHost = databaseConfigValue(config, "host", "POSTGRES_HOST", dotEnv)
             ?: "localhost"
 
-        val dbPort = config.propertyOrNull("database.port")?.getString()
-            ?: System.getenv("POSTGRES_PORT")
+        val dbPort = databaseConfigValue(config, "port", "POSTGRES_PORT", dotEnv)
             ?: "5432"
 
-        val dbName = config.propertyOrNull("database.name")?.getString()
-            ?: System.getenv("POSTGRES_DB")
-            ?: "ranelle"
+        val dbName = databaseConfigValue(config, "name", "POSTGRES_DB", dotEnv)
+            ?: "plantDB"
 
-        val dbUser = config.propertyOrNull("database.user")?.getString()
-            ?: System.getenv("POSTGRES_USER")
-            ?: "ranelle_user"
+        val dbUser = databaseConfigValue(config, "user", "POSTGRES_USER", dotEnv)
+            ?: "plant_user"
 
-        val dbPassword = config.propertyOrNull("database.password")?.getString()
-            ?: System.getenv("POSTGRES_PASSWORD")
-            ?: "ranelle_password"
+        val dbPassword = databaseConfigValue(config, "password", "POSTGRES_PASSWORD", dotEnv)
+            ?: "plant_password"
 
         Database.connect(
             url = "jdbc:postgresql://$dbHost:$dbPort/$dbName",
@@ -38,5 +37,34 @@ object DatabaseFactory {
         transaction {
             SchemaUtils.createMissingTablesAndColumns(PlantsTable)
         }
+    }
+
+    private fun databaseConfigValue(
+        config: ApplicationConfig,
+        key: String,
+        envKey: String,
+        dotEnv: Map<String, String>
+    ): String? =
+        config.propertyOrNull("database.$key")?.getString()
+            ?: System.getenv(envKey)
+            ?: dotEnv[envKey]
+
+    private fun loadDotEnv(): Map<String, String> {
+        val dotEnvPath = Path.of(".env")
+        if (!Files.isRegularFile(dotEnvPath)) return emptyMap()
+
+        return Files.readAllLines(dotEnvPath)
+            .asSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() && !it.startsWith("#") }
+            .mapNotNull { line ->
+                val separatorIndex = line.indexOf('=')
+                if (separatorIndex <= 0) return@mapNotNull null
+
+                val key = line.substring(0, separatorIndex).trim()
+                val value = line.substring(separatorIndex + 1).trim().trim('"', '\'')
+                key to value
+            }
+            .toMap()
     }
 }

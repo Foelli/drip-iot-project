@@ -3,7 +3,7 @@
 services:
   postgres:
     image: postgres:17
-    container_name: ranelle-postgres
+    container_name: postgres_plantDB
     restart: unless-stopped
 
     environment:
