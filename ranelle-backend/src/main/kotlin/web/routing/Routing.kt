@@ -5,7 +5,6 @@ import io.ktor.server.application.*
 import io.ktor.server.request.receive
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
-import kotlinx.serialization.Serializable
 import plant.domain.entity.Plant
 import plant.domain.usecase.AddPlantUseCase
 import plant.domain.usecase.DeletePlantUseCase
