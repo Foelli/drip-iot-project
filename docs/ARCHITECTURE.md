@@ -27,6 +27,8 @@ The intended deployed system is:
 - Raspberry Pi Pico (or RP2040 board) reads sensors and controls actuators.
 - Pico sends readings and receives commands over HTTP to/from the Ktor backend (typically running on a Raspberry Pi).
 - Vue dashboard talks directly to the backend over HTTP on the same LAN.
+- Production runs on a DIY homeserver using Docker containers for frontend, backend, and Postgres.
+- The public dashboard entrypoint is Cloudflare Tunnel in front of the frontend.
 
 ## Architecture rules (backend)
 
@@ -141,6 +143,24 @@ Frontend (from `faron-frontend/`):
 - Install: `npm install`
 - Dev: `npm run dev`
 - Build: `npm run build`
+
+## Deployment architecture (target)
+
+The deployment target is a homeserver running the full stack with Docker:
+
+- `frontend`: serves the built Vue dashboard.
+- `backend`: runs the Ktor API.
+- `postgres`: stores all persistent backend state.
+- `cloudflared` (optional container): exposes the frontend through Cloudflare Tunnel.
+
+Rules:
+
+- Images are built from `main` and published with versioned tags.
+- Homeserver pulls released image tags and updates the running containers.
+- Postgres data must live in a persistent Docker volume.
+- Secrets must be injected via env vars or Docker secrets, not committed files.
+- Backend should stay private to the Docker network unless a ticket explicitly exposes it.
+- Frontend should use a configured API base URL; do not hard-code local dev ports in production code.
 
 ## Definition of done (for issues)
 
