@@ -3,7 +3,7 @@ ktor:
         modules:
             - web.ApplicationKt.module
     deployment:
-        host: 0.0.0.0gi
+        host: 0.0.0.0
         port: 8080
 
 database:
