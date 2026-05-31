@@ -1,22 +1,21 @@
+<script setup lang="ts">
+import { RouterLink, RouterView } from 'vue-router'
+</script>
+
 <template>
   <div class="app-shell">
     <header class="app-header">
-      <a class="app-logo" href="/" aria-label="Home">App</a>
+      <RouterLink class="app-logo" to="/" aria-label="Dashboard">DRIP</RouterLink>
 
       <nav class="app-nav" aria-label="Primary navigation">
-        <a href="/">Home</a>
+        <RouterLink to="/">Dashboard</RouterLink>
+        <RouterLink to="/plants">Plants</RouterLink>
+        <RouterLink to="/settings">Settings</RouterLink>
       </nav>
     </header>
 
     <main class="app-main">
-      <section class="page-section" aria-labelledby="page-title">
-        <p class="eyebrow">Vue starter</p>
-        <h1 id="page-title">Ready to build.</h1>
-        <p class="lede">
-          This is a clean application shell with neutral styling, ready for
-          features, routes, and shared components.
-        </p>
-      </section>
+      <RouterView />
     </main>
   </div>
 </template>
