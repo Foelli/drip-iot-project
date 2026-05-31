@@ -1,6 +1,6 @@
-# faron-frontend
+# learning-project
 
-Frontend application built with Vue 3, TypeScript, Vue Router, and Vite.
+This template should help get you started developing with Vue 3 in Vite.
 
 ## Recommended IDE Setup
 
@@ -17,9 +17,7 @@ Frontend application built with Vue 3, TypeScript, Vue Router, and Vite.
 
 ## Type Support for `.vue` Imports in TS
 
-TypeScript cannot handle type information for `.vue` imports by default, so this project uses
-`vue-tsc` for type checking. In editors, use [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar)
-to make the TypeScript language service aware of `.vue` types.
+TypeScript cannot handle type information for `.vue` imports by default, so we replace the `tsc` CLI with `vue-tsc` for type checking. In editors, we need [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) to make the TypeScript language service aware of `.vue` types.
 
 ## Customize configuration
 
@@ -43,7 +41,7 @@ npm run dev
 npm run build
 ```
 
-### Lint with ESLint and Oxlint
+### Lint with [ESLint](https://eslint.org/)
 
 ```sh
 npm run lint
