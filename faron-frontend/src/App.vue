@@ -1,47 +1,22 @@
-<script setup>
-import HelloWorld from './components/HelloWorld.vue'
-import TheWelcome from './components/TheWelcome.vue'
-</script>
-
 <template>
-  <header>
-    <img alt="Vue logo" class="logo" src="./assets/logo.svg" width="125" height="125" />
+  <div class="app-shell">
+    <header class="app-header">
+      <a class="app-logo" href="/" aria-label="Home">App</a>
 
-    <div class="wrapper">
-      <HelloWorld msg="You did it!" />
-    </div>
-  </header>
+      <nav class="app-nav" aria-label="Primary navigation">
+        <a href="/">Home</a>
+      </nav>
+    </header>
 
-  <main>
-    <TheWelcome />
-  </main>
+    <main class="app-main">
+      <section class="page-section" aria-labelledby="page-title">
+        <p class="eyebrow">Vue starter</p>
+        <h1 id="page-title">Ready to build.</h1>
+        <p class="lede">
+          This is a clean application shell with neutral styling, ready for
+          features, routes, and shared components.
+        </p>
+      </section>
+    </main>
+  </div>
 </template>
-
-<style scoped>
-header {
-  line-height: 1.5;
-}
-
-.logo {
-  display: block;
-  margin: 0 auto 2rem;
-}
-
-@media (min-width: 1024px) {
-  header {
-    display: flex;
-    place-items: center;
-    padding-right: calc(var(--section-gap) / 2);
-  }
-
-  .logo {
-    margin: 0 2rem 0 0;
-  }
-
-  header .wrapper {
-    display: flex;
-    place-items: flex-start;
-    flex-wrap: wrap;
-  }
-}
-</style>
