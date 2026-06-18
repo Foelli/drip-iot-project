@@ -20,7 +20,9 @@ const themeOverrides: GlobalThemeOverrides = {
 <template>
   <n-config-provider :theme="theme" :theme-overrides="themeOverrides">
     <n-message-provider>
-      <AppShell />
+      <n-notification-provider>
+        <AppShell />
+      </n-notification-provider>
     </n-message-provider>
   </n-config-provider>
 </template>

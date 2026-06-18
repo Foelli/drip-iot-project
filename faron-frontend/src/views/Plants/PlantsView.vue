@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Add } from '@vicons/ionicons5'
-import { ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import PlantCard from '@/components/plants/PlantCard.vue'
 import PlantDetail from '@/components/plants/PlantDetail.vue'
 import type { Plant, PlantLight, PlantSettings } from '@/types/Plant'
@@ -16,6 +17,19 @@ function openDetail(plant: Plant) {
   selectedPlant.value = plant
   showDetail.value = true
 }
+
+// Allow other views to deep-link into a plant via `/plants?open=<id>` (e.g. the
+// Overview's care queue rows). We watch the query so back/forward navigation
+// also re-opens the right drawer.
+const route = useRoute()
+function maybeOpenFromQuery() {
+  const id = route.query.open
+  if (typeof id !== 'string') return
+  const target = plants.value.find((p) => String(p.id) === id)
+  if (target) openDetail(target)
+}
+onMounted(maybeOpenFromQuery)
+watch(() => route.query.open, maybeOpenFromQuery)
 
 // Shared automation defaults so each mock plant only specifies its thresholds.
 function makeSettings(

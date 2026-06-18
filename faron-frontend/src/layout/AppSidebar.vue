@@ -21,7 +21,7 @@ import {
   BarChartOutline,
 } from '@vicons/ionicons5'
 
-import RoomSwitcher from './RoomSwitcher.vue'
+import AppLogo from './AppLogo.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -80,7 +80,7 @@ function renderIcon(key: string, activeIcon: Component, inactiveIcon: Component)
     :collapsed-width="50"
     :collapsed="false"
   >
-    <room-switcher />
+    <AppLogo />
 
     <n-divider />
 
@@ -92,13 +92,14 @@ function renderIcon(key: string, activeIcon: Component, inactiveIcon: Component)
       :outline="true"
     />
 
+    <div class="sidebar-spacer" />
+
     <n-menu
       class="bottom-menu"
       :options="bottomMenuOptions"
       :value="selectedKey"
       @update:value="handleMenuSelect"
     />
-    <n-divider />
   </n-layout-sider>
 </template>
 
@@ -108,9 +109,33 @@ function renderIcon(key: string, activeIcon: Component, inactiveIcon: Component)
   overflow: hidden;
 
   --sidebar-x-padding: 0.75rem;
+  /* outer horizontal inset shared by the logo, main menu and bottom menu so
+     they all start/end at the same x */
+  --sidebar-gutter: 8px;
   --sidebar-item-text-active: var(--color-accent);
   --sidebar-item-bg-hover: var(--color-surface-hover);
   --sidebar-item-bg-selected: var(--color-accent-soft);
+}
+
+/* Make the sider's content wrapper a full-height flex column so the spacer
+   between the two menus can absorb all remaining vertical space. */
+:deep(.n-layout-sider-scroll-container) {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* Kill naive's default 24px divider margins so the divider sits flush at the
+   bottom of the 4.5rem brand row (removes the empty gap under the logo and
+   aligns the line with the topbar's bottom edge). */
+:deep(.n-divider:not(.n-divider--vertical)) {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+/* The flexible gap that pushes main-menu to the top and bottom-menu to the base. */
+.sidebar-spacer {
+  flex: 1 1 auto;
 }
 
 /* ============================================================
@@ -119,39 +144,35 @@ function renderIcon(key: string, activeIcon: Component, inactiveIcon: Component)
    the <n-menu> wrappers, so scoped styles reach them directly.
 ============================================================ */
 .main-menu {
-  margin-top: 1rem;
+margin-top: auto;
 }
 
-.bottom-menu {
-  /* push the bottom menu toward the base of the sidebar */
-  margin-top: clamp(2rem, calc(300vh - 28rem), 25rem);
-  margin-bottom: 1rem;
-}
+/* bottom-menu sits at the base because .sidebar-spacer eats the free space above it */
 
-/* MAIN MENU */
-:deep(.main-menu .n-menu-item-content) {
-  margin: 4px 8px;
+/* BOTH MENUS — same horizontal gutter + inner padding so items line up */
+:deep(.n-menu-item-content) {
+  margin: 4px var(--sidebar-gutter);
   padding-left: var(--sidebar-x-padding) !important;
   border-radius: 8px;
   box-sizing: border-box;
   transition: color 150ms ease;
 }
 
-/* MAIN MENU */
-:deep(.main-menu .n-menu-item-content::before) {
+/* BOTH MENUS — hover/selected background spans the inset item box */
+:deep(.n-menu-item-content::before) {
   left: 0;
   right: 0;
   border-radius: 8px;
   transition: background-color 150ms ease;
 }
 
-/* MAIN MENU */
-:deep(.main-menu .n-menu-item-content:hover::before) {
+/* BOTH MENUS */
+:deep(.n-menu-item-content:hover::before) {
   background-color: var(--sidebar-item-bg-hover);
 }
 
-/* MAIN MENU */
-:deep(.main-menu .n-menu-item-content--selected::before) {
+/* BOTH MENUS */
+:deep(.n-menu-item-content--selected::before) {
   background-color: var(--sidebar-item-bg-selected);
 }
 

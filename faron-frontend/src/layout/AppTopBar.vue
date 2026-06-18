@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useMessage, useNotification } from 'naive-ui'
 import { CalendarOutline, NotificationsOutline, Moon, MoonOutline } from '@vicons/ionicons5'
 import { useThemeStore } from '@/stores/theme'
 
@@ -26,6 +27,20 @@ const currentLabel = computed(() => sectionLabels[route.path] ?? 'Unknown')
 const isHome = computed(() => route.path === '/')
 const isBottomMenu = computed(() => bottomMenuPaths.has(route.path))
 const showOverviewCrumb = computed(() => !isHome.value && !isBottomMenu.value)
+
+const message = useMessage()
+const notification = useNotification()
+const handleNotificationClick = () => {
+  if (hasUnread.value) {
+    notification.info({
+      title: 'New Notification',
+      content: 'You have new notifications to check out.',
+    })
+    hasUnread.value = false
+  } else {
+    message.info('No new notifications')
+  }
+}
 </script>
 
 <template>
@@ -39,7 +54,7 @@ const showOverviewCrumb = computed(() => !isHome.value && !isBottomMenu.value)
     </n-breadcrumb>
     <div class="topbar-actions">
       <!-- Date pill -->
-      <n-button size="large" secondary>
+      <n-button size="large" quaternary :focusable="false">
         <template #icon>
           <n-icon><CalendarOutline /></n-icon>
         </template>
@@ -48,7 +63,7 @@ const showOverviewCrumb = computed(() => !isHome.value && !isBottomMenu.value)
 
       <!-- Notifications -->
       <n-badge dot :show="hasUnread">
-        <n-button size="large" circle>
+        <n-button size="large" circle @click="handleNotificationClick">
           <n-icon><NotificationsOutline /></n-icon>
         </n-button>
       </n-badge>
