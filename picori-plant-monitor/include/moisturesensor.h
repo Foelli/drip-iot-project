@@ -9,7 +9,7 @@ public:
 
   void init() override;
   void handleEvent(Event event) override;
-  void readMoistureLevel();
+  int readMoisturePercent();
 
 private:
   int moisturePin;

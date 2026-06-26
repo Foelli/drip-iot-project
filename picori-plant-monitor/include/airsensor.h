@@ -10,7 +10,8 @@ public:
 
   void init() override;
   void handleEvent(Event event) override;
-  void readAirValues();
+  float readTemperature();
+  float readHumidity();
 
 private:
   DHT dht;

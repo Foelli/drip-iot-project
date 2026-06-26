@@ -3,6 +3,7 @@
 
 #include "airsensor.h"
 #include "moisturesensor.h"
+#include "sensorreading.h"
 #include "smf.h"
 #include "statusled.h"
 

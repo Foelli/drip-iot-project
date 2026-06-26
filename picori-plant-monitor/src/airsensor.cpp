@@ -13,23 +13,6 @@ void AirSensor::init() {
 
 void AirSensor::handleEvent(Event event) {}
 
-void AirSensor::readAirValues() {
-  float humidity = dht.readHumidity();
-  float temperature = dht.readTemperature();
+float AirSensor::readTemperature() { return dht.readTemperature(); }
 
-  if (isnan(humidity) || isnan(temperature)) {
-    Serial.println("Air sensor read failed");
-    Serial.println();
-    return;
-  }
-
-  Serial.println("Air sensor");
-  Serial.println("----------");
-  Serial.print("Temperature: ");
-  Serial.print(temperature, 1);
-  Serial.println(" C");
-  Serial.print("Humidity:    ");
-  Serial.print(humidity, 1);
-  Serial.println(" %");
-  Serial.println();
-}
+float AirSensor::readHumidity() { return dht.readHumidity(); }
