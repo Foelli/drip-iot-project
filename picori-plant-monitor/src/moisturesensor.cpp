@@ -11,7 +11,7 @@ void MoistureSensor::init() {
 
 void MoistureSensor::handleEvent(Event event) {}
 
-void MoistureSensor::readMoistureLevel() {
+int MoistureSensor::readMoisturePercent() {
   int raw = analogRead(moisturePin);
 
   if (raw > dryValue) {
@@ -45,5 +45,8 @@ void MoistureSensor::readMoistureLevel() {
     Serial.print(moisturePercent);
     Serial.println(" %");
     Serial.println();
+
   }
+
+  return moisturePercent;
 }
