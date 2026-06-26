@@ -2,6 +2,7 @@
 #define APPLICATION_H
 
 #include "smf.h"
+#include "statusled.h"
 
 class Application {
 public:
@@ -18,6 +19,9 @@ class Firmware : public Application {
 public:
   void init();
   void idle();
+
+private:
+  StatusLED statusLED;
 };
 
 #endif
