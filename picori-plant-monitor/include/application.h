@@ -1,6 +1,7 @@
 #ifndef APPLICATION_H
 #define APPLICATION_H
 
+#include "moisturesensor.h"
 #include "smf.h"
 #include "statusled.h"
 
@@ -22,6 +23,7 @@ public:
 
 private:
   StatusLED statusLED;
+  MoistureSensor moistureSensor;
 };
 
 #endif
