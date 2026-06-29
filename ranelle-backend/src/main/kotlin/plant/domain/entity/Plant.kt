@@ -25,4 +25,8 @@ data class Plant(
 
     // Plant description
     val description: String? = null,
+
+    val temperature: Int? = null,
+    val moisture: Int? = null,
+    val light: Int? = null,
 )

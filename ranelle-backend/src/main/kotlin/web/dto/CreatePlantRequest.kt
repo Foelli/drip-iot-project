@@ -29,4 +29,7 @@ data class CreatePlantRequest(
     val customName: String? = null,
     val thumbnailUrl: String? = null,
     val description: String? = null,
+    val temperature: Int? = null,
+    val moisture: Int? = null,
+    val light: Int? = null,
 )
