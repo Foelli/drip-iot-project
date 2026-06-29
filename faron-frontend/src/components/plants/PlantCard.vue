@@ -23,7 +23,7 @@ function handleWaterClick() {
   const start = performance.now()
   intervalId = setInterval(() => {
     const pct = Math.min(100, ((performance.now() - start) / WATER_DURATION_MS) * 100)
-    wateringProgress.value = pct
+    wateringProgress.value = Math.round(pct)
     if (pct >= 100) {
       stopWatering()
     }
@@ -122,11 +122,9 @@ const statusDot = computed(() =>
           type="line"
           :percentage="wateringProgress"
           :color="WATER_COLOR"
-          :height="8"
-          :border-radius="4"
-          :show-indicator="false"
+          indicator-placement="inside"
+          processing
         />
-        <span class="watering-progress__label">Watering…</span>
       </div>
       <n-button
         v-else
@@ -241,12 +239,5 @@ const statusDot = computed(() =>
 }
 .watering-progress :deep(.n-progress) {
   flex: 1;
-}
-.watering-progress__label {
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--color-text-muted);
-  min-width: 5.5rem;
-  text-align: right;
 }
 </style>
