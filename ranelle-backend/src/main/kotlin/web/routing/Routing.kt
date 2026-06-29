@@ -51,6 +51,10 @@ fun Application.configureRouting(
                         customName = req.customName,
                         thumbnailUrl = req.thumbnailUrl,
                         description = req.description,
+                        temperature = req.temperature,
+                        moisture = req.moisture,
+                        light = req.light,
+
                     )
                     addPlantUseCase(plant)
                     call.respond(HttpStatusCode.Created)
@@ -100,6 +104,15 @@ fun Application.configureRouting(
                     } catch (e: NoSuchElementException) {
                         call.respond(HttpStatusCode.NotFound, e.message ?: "Not found")
                     }
+                }
+
+                get ("/{id}") {
+                    val id = call.parameters["id"]?.toIntOrNull()
+                        ?: return@get call.respond(HttpStatusCode.BadRequest, "Invalid id")
+
+                        val plant = getPlantByIdUseCase(id)
+                        call.respond(plant as Plant)
+
                 }
             }
         }

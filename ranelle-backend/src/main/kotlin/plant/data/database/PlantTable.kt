@@ -10,6 +10,9 @@ object PlantsTable : Table("plants") {
     val customName = text("custom_name").nullable()
     val thumbnailUrl = text("thumbnail_url").nullable()
     val description = text("description").nullable()
+    val temperature = integer("temperature").nullable()
+    val moisture = integer("moisture").nullable()
+    val light = integer("light").nullable()
 
     override val primaryKey = PrimaryKey(id)
 }

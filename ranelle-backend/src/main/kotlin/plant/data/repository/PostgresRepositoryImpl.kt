@@ -10,6 +10,7 @@ import org.jetbrains.exposed.v1.jdbc.update
 import plant.data.database.PlantsTable
 import plant.domain.entity.Plant
 import plant.domain.repository.PlantRepository
+import java.util.NoSuchElementException
 
 class PostgresRepositoryImpl: PlantRepository {
     override suspend fun addPlant(plant: Plant) {
@@ -21,6 +22,9 @@ class PostgresRepositoryImpl: PlantRepository {
                 it[customName] = plant.customName
                 it[thumbnailUrl] = plant.thumbnailUrl
                 it[description] = plant.description
+                it[temperature] = plant.temperature
+                it[moisture] = plant.moisture
+                it[light] = plant.light
             }
         }
     }
@@ -85,6 +89,9 @@ class PostgresRepositoryImpl: PlantRepository {
             customName = row[PlantsTable.customName],
             thumbnailUrl = row[PlantsTable.thumbnailUrl],
             description = row[PlantsTable.description],
+            temperature = row[PlantsTable.temperature],
+            moisture = row[PlantsTable.moisture],
+            light = row[PlantsTable.light],
         )
     }
 }

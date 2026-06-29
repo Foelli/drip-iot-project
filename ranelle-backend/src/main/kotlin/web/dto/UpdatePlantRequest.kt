@@ -29,4 +29,7 @@ data class UpdatePlantRequest(
     val customName: String,
     val thumbnailUrl: String,
     val description: String,
+    val temperature: Int,
+    val moisture: Int,
+    val light: Int,
 )
