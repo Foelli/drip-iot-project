@@ -31,5 +31,9 @@ data class CreatePlantRequest(
     val description: String? = null,
     val temperature: Int? = null,
     val moisture: Int? = null,
-    val light: Int? = null,
+    val airMoisture: Int? = null,
+    val wateringEnabled: Boolean = true,
+    val moistureThreshold: Int = 35,
+    val pumpDurationMs: Int = 2000,
+    val waterSettleMs: Int = 20000,
 )

@@ -14,12 +14,18 @@ import plant.domain.usecase.DeletePlantUseCase
 import plant.domain.usecase.GetPlantByIdUseCase
 import plant.domain.usecase.GetPlantsUseCase
 import plant.domain.usecase.UpdatePlantUseCase
+import sensor.domain.entity.Measurement
+import sensor.domain.repository.MeasurementRepository
+import sensor.domain.usecase.AddMeasurementUseCase
+import sensor.domain.usecase.GetLatestMeasurementUseCase
+import sensor.domain.usecase.GetMeasurementsForPlantUseCase
 
 class HealthRouteTest {
 
     @Test
     fun `GET health returns ok`() = testApplication {
         val repository = fakeRepository()
+        val measurementRepository = fakeMeasurementRepository()
 
         application {
             configureRouting(
@@ -28,6 +34,15 @@ class HealthRouteTest {
                 addPlantUseCase = AddPlantUseCase(Dispatchers.Unconfined, repository),
                 updatePlantUseCase = UpdatePlantUseCase(Dispatchers.Unconfined, repository),
                 deletePlantUseCase = DeletePlantUseCase(Dispatchers.Unconfined, repository),
+                addMeasurementUseCase = AddMeasurementUseCase(Dispatchers.Unconfined, measurementRepository),
+                getLatestMeasurementUseCase = GetLatestMeasurementUseCase(
+                    Dispatchers.Unconfined,
+                    measurementRepository,
+                ),
+                getMeasurementsForPlantUseCase = GetMeasurementsForPlantUseCase(
+                    Dispatchers.Unconfined,
+                    measurementRepository,
+                ),
             )
         }
 
@@ -45,4 +60,11 @@ private fun fakeRepository(): PlantRepository =
         override suspend fun updatePlant(plant: Plant) = Unit
         override suspend fun getAllPlants(): List<Plant> = emptyList()
         override suspend fun findById(plantId: Int): Plant? = null
+    }
+
+private fun fakeMeasurementRepository(): MeasurementRepository =
+    object : MeasurementRepository {
+        override suspend fun addMeasurement(measurement: Measurement): Measurement = measurement.copy(id = 1)
+        override suspend fun getMeasurementsForPlant(plantId: Int): List<Measurement> = emptyList()
+        override suspend fun getLatestMeasurementForPlant(plantId: Int): Measurement? = null
     }

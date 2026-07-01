@@ -11,15 +11,28 @@ import plant.domain.usecase.DeletePlantUseCase
 import plant.domain.usecase.GetPlantByIdUseCase
 import plant.domain.usecase.GetPlantsUseCase
 import plant.domain.usecase.UpdatePlantUseCase
+import sensor.domain.entity.Measurement
+import sensor.domain.usecase.AddMeasurementUseCase
+import sensor.domain.usecase.GetLatestMeasurementUseCase
+import sensor.domain.usecase.GetMeasurementsForPlantUseCase
+import web.dto.CreateMeasurementRequest
 import web.dto.CreatePlantRequest
+import web.dto.CreateWateringEventRequest
 import web.dto.UpdatePlantRequest
+import web.dto.WateringConfigResponse
+import watering.data.repository.PostgresWateringEventRepository
+import watering.domain.entity.WateringEvent
 
 fun Application.configureRouting(
     getPlantsUseCase: GetPlantsUseCase,
     getPlantByIdUseCase: GetPlantByIdUseCase,
     addPlantUseCase: AddPlantUseCase,
     updatePlantUseCase: UpdatePlantUseCase,
-    deletePlantUseCase: DeletePlantUseCase
+    deletePlantUseCase: DeletePlantUseCase,
+    addMeasurementUseCase: AddMeasurementUseCase,
+    getLatestMeasurementUseCase: GetLatestMeasurementUseCase,
+    getMeasurementsForPlantUseCase: GetMeasurementsForPlantUseCase,
+    wateringEventRepository: PostgresWateringEventRepository = PostgresWateringEventRepository(),
 ) {
     routing {
         route("/api/v1") {
@@ -53,7 +66,11 @@ fun Application.configureRouting(
                         description = req.description,
                         temperature = req.temperature,
                         moisture = req.moisture,
-                        light = req.light,
+                        airMoisture = req.airMoisture,
+                        wateringEnabled = req.wateringEnabled,
+                        moistureThreshold = req.moistureThreshold,
+                        pumpDurationMs = req.pumpDurationMs,
+                        waterSettleMs = req.waterSettleMs,
 
                     )
                     addPlantUseCase(plant)
@@ -73,16 +90,20 @@ fun Application.configureRouting(
                             "Plant with id $id was not found"
                         )
 
-                    // Required fields are non-nullable on `UpdatePlantRequest`, so
-                    // kotlinx.serialization rejects incomplete payloads before
-                    // this line — no per-field null guards needed.
                     val req = call.receive<UpdatePlantRequest>()
                     val updated = existing.copy(
-                        commonName = req.commonName,
-                        scientificName = req.scientificName,
-                        customName = req.customName,
-                        thumbnailUrl = req.thumbnailUrl,
-                        description = req.description,
+                        commonName = req.commonName ?: existing.commonName,
+                        scientificName = req.scientificName ?: existing.scientificName,
+                        customName = req.customName ?: existing.customName,
+                        thumbnailUrl = req.thumbnailUrl ?: existing.thumbnailUrl,
+                        description = req.description ?: existing.description,
+                        temperature = req.temperature ?: existing.temperature,
+                        moisture = req.moisture ?: existing.moisture,
+                        airMoisture = req.airMoisture ?: existing.airMoisture,
+                        wateringEnabled = req.wateringEnabled ?: existing.wateringEnabled,
+                        moistureThreshold = req.moistureThreshold ?: existing.moistureThreshold,
+                        pumpDurationMs = req.pumpDurationMs ?: existing.pumpDurationMs,
+                        waterSettleMs = req.waterSettleMs ?: existing.waterSettleMs,
                     )
                     try {
                         updatePlantUseCase(updated)
@@ -113,6 +134,120 @@ fun Application.configureRouting(
                         val plant = getPlantByIdUseCase(id)
                         call.respond(plant as Plant)
 
+                }
+
+                get("/{id}/watering-config") {
+                    val id = call.parameters["id"]?.toIntOrNull()
+                        ?: return@get call.respond(HttpStatusCode.BadRequest, "Invalid id")
+
+                    val plant = getPlantByIdUseCase(id)
+                        ?: return@get call.respond(
+                            HttpStatusCode.NotFound,
+                            "Plant with id $id was not found"
+                        )
+
+                    call.respond(
+                        WateringConfigResponse(
+                            enabled = plant.wateringEnabled,
+                            moistureThreshold = plant.moistureThreshold,
+                            pumpDurationMs = plant.pumpDurationMs,
+                            waterSettleMs = plant.waterSettleMs,
+                        )
+                    )
+                }
+
+                route("/{id}/watering-events") {
+                    post {
+                        val plantId = call.parameters["id"]?.toIntOrNull()
+                            ?: return@post call.respond(HttpStatusCode.BadRequest, "Invalid id")
+
+                        getPlantByIdUseCase(plantId)
+                            ?: return@post call.respond(
+                                HttpStatusCode.NotFound,
+                                "Plant with id $plantId was not found"
+                            )
+
+                        val req = call.receive<CreateWateringEventRequest>()
+                        val event = wateringEventRepository.add(
+                            WateringEvent(
+                                plantId = plantId,
+                                moistureBefore = req.moistureBefore,
+                                pumpDurationMs = req.pumpDurationMs,
+                            )
+                        )
+
+                        call.respond(HttpStatusCode.Created, event)
+                    }
+
+                    get {
+                        val plantId = call.parameters["id"]?.toIntOrNull()
+                            ?: return@get call.respond(HttpStatusCode.BadRequest, "Invalid id")
+
+                        getPlantByIdUseCase(plantId)
+                            ?: return@get call.respond(
+                                HttpStatusCode.NotFound,
+                                "Plant with id $plantId was not found"
+                            )
+
+                        call.respond(wateringEventRepository.getForPlant(plantId))
+                    }
+                }
+
+                route("/{id}/measurements") {
+                    post {
+                        val plantId = call.parameters["id"]?.toIntOrNull()
+                            ?: return@post call.respond(HttpStatusCode.BadRequest, "Invalid id")
+
+                        getPlantByIdUseCase(plantId)
+                            ?: return@post call.respond(
+                                HttpStatusCode.NotFound,
+                                "Plant with id $plantId was not found"
+                            )
+
+                        val req = call.receive<CreateMeasurementRequest>()
+                        val measurement = addMeasurementUseCase(
+                            Measurement(
+                                plantId = plantId,
+                                temperature = req.temperature,
+                                soilMoisture = req.soilMoisture,
+                                airMoisture = req.airMoisture,
+                            )
+                        )
+
+                        call.respond(HttpStatusCode.Created, measurement)
+                    }
+
+                    get {
+                        val plantId = call.parameters["id"]?.toIntOrNull()
+                            ?: return@get call.respond(HttpStatusCode.BadRequest, "Invalid id")
+
+                        getPlantByIdUseCase(plantId)
+                            ?: return@get call.respond(
+                                HttpStatusCode.NotFound,
+                                "Plant with id $plantId was not found"
+                            )
+
+                        call.respond(getMeasurementsForPlantUseCase(plantId))
+                    }
+
+                    get("/latest") {
+                        val plantId = call.parameters["id"]?.toIntOrNull()
+                            ?: return@get call.respond(HttpStatusCode.BadRequest, "Invalid id")
+
+                        getPlantByIdUseCase(plantId)
+                            ?: return@get call.respond(
+                                HttpStatusCode.NotFound,
+                                "Plant with id $plantId was not found"
+                            )
+
+                        val measurement = getLatestMeasurementUseCase(plantId)
+                            ?: return@get call.respond(
+                                HttpStatusCode.NotFound,
+                                "No measurements found for plant with id $plantId"
+                            )
+
+                        call.respond(measurement)
+                    }
                 }
             }
         }
