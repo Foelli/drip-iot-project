@@ -5,6 +5,7 @@ import io.ktor.server.application.*
 import io.ktor.server.request.receive
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import care.OpenAiCareInfoService
 import plant.domain.entity.Plant
 import plant.domain.usecase.AddPlantUseCase
 import plant.domain.usecase.DeletePlantUseCase
@@ -18,6 +19,7 @@ import sensor.domain.usecase.GetMeasurementsForPlantUseCase
 import web.dto.CreateMeasurementRequest
 import web.dto.CreatePlantRequest
 import web.dto.CreateWateringEventRequest
+import web.dto.GenerateCareInfoRequest
 import web.dto.UpdatePlantRequest
 import web.dto.WateringConfigResponse
 import watering.data.repository.PostgresWateringEventRepository
@@ -33,6 +35,7 @@ fun Application.configureRouting(
     getLatestMeasurementUseCase: GetLatestMeasurementUseCase,
     getMeasurementsForPlantUseCase: GetMeasurementsForPlantUseCase,
     wateringEventRepository: PostgresWateringEventRepository = PostgresWateringEventRepository(),
+    careInfoService: OpenAiCareInfoService = OpenAiCareInfoService(),
 ) {
     routing {
         route("/api/v1") {
@@ -46,6 +49,25 @@ fun Application.configureRouting(
             }
 
             route("/plants") {
+
+                post("/care-info") {
+                    val req = call.receive<GenerateCareInfoRequest>()
+                    if (req.commonName.isBlank()) {
+                        return@post call.respond(HttpStatusCode.BadRequest, "Plant name is required")
+                    }
+
+                    try {
+                        call.respond(
+                            careInfoService.generate(
+                                commonName = req.commonName,
+                                scientificName = req.scientificName,
+                                notes = req.notes,
+                            ),
+                        )
+                    } catch (e: IllegalStateException) {
+                        call.respond(HttpStatusCode.ServiceUnavailable, e.message ?: "Care info unavailable")
+                    }
+                }
 
                 // GET /plants
                 get {
@@ -71,6 +93,13 @@ fun Application.configureRouting(
                         moistureThreshold = req.moistureThreshold,
                         pumpDurationMs = req.pumpDurationMs,
                         waterSettleMs = req.waterSettleMs,
+                        idealMoistureMin = req.idealMoistureMin,
+                        idealMoistureMax = req.idealMoistureMax,
+                        idealTempMin = req.idealTempMin,
+                        idealTempMax = req.idealTempMax,
+                        idealAirMoistureMin = req.idealAirMoistureMin,
+                        idealAirMoistureMax = req.idealAirMoistureMax,
+                        careNotes = req.careNotes,
 
                     )
                     addPlantUseCase(plant)
@@ -104,6 +133,13 @@ fun Application.configureRouting(
                         moistureThreshold = req.moistureThreshold ?: existing.moistureThreshold,
                         pumpDurationMs = req.pumpDurationMs ?: existing.pumpDurationMs,
                         waterSettleMs = req.waterSettleMs ?: existing.waterSettleMs,
+                        idealMoistureMin = req.idealMoistureMin ?: existing.idealMoistureMin,
+                        idealMoistureMax = req.idealMoistureMax ?: existing.idealMoistureMax,
+                        idealTempMin = req.idealTempMin ?: existing.idealTempMin,
+                        idealTempMax = req.idealTempMax ?: existing.idealTempMax,
+                        idealAirMoistureMin = req.idealAirMoistureMin ?: existing.idealAirMoistureMin,
+                        idealAirMoistureMax = req.idealAirMoistureMax ?: existing.idealAirMoistureMax,
+                        careNotes = req.careNotes ?: existing.careNotes,
                     )
                     try {
                         updatePlantUseCase(updated)

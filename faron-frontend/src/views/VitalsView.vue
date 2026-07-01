@@ -1,37 +1,17 @@
 <script setup lang="ts">
-import { computed, h, ref } from 'vue'
-import { type DataTableColumns, NButton } from 'naive-ui'
+import { computed, h, onMounted, ref } from 'vue'
+import { type DataTableColumns } from 'naive-ui'
+import { api, type Measurement } from '@/api/client'
+import { mapBackendPlantToPlant } from '@/api/mappers'
 import { OFFLINE_CONFIG, STATUS_CONFIG } from '@/components/plants/plantDisplay'
+import type { Plant, PlantStatus } from '@/types/Plant'
 
 defineOptions({ name: 'VitalsView' })
 
-// --- Fleet summary mock ---
-const summary = ref({
-  plants_total: 12,
-  healthy: 8,
-  healthy_delta: 1,
-  needs_attention: 3,
-  needs_attention_delta: 2,
-  critical: 1,
-  critical_delta: 0,
-  devices_online: 10,
-  devices_total: 12,
-})
-
-type Delta = { display: string; tone: 'good' | 'bad' } | null
-function deltaFor(value: number, goodDirection: 'up' | 'down'): Delta {
-  if (value === 0) return null
-  const arrow = value > 0 ? '▲' : '▼'
-  const isGood = value > 0 === (goodDirection === 'up')
-  return { display: `${arrow}${Math.abs(value)}`, tone: isGood ? 'good' : 'bad' }
-}
-
-const healthyDelta = computed(() => deltaFor(summary.value.healthy_delta, 'up'))
-const attentionDelta = computed(() => deltaFor(summary.value.needs_attention_delta, 'down'))
-const criticalDelta = computed(() => deltaFor(summary.value.critical_delta, 'down'))
-
-// --- Attention queue mock ---
+type Range = '24h' | '7d' | '30d' | '90d'
+type Metric = 'moisture' | 'temp'
 type Severity = 'critical' | 'needs_attention' | 'offline'
+
 interface AttentionRow {
   id: number
   severity: Severity
@@ -41,9 +21,125 @@ interface AttentionRow {
   last_reading: string
 }
 
+interface HeatmapRow {
+  plant: string
+  data: { moisture: (number | null)[]; temp: (number | null)[] }
+}
+
+interface TrendRow {
+  plant: string
+  color: string
+  moisture: number[]
+  temp: number[]
+}
+
+interface DeviceRow {
+  id: number
+  device: string
+  plant: string
+  online: boolean
+  firmware: string
+  last_seen: string
+}
+
+const plants = ref<Plant[]>([])
+const measurementsByPlant = ref<Record<number, Measurement[]>>({})
+const loading = ref(false)
+const error = ref<string | null>(null)
+const range = ref<Range>('7d')
+const heatmapMetric = ref<Metric>('moisture')
+
+const rangeOptions: { label: string; value: Range }[] = [
+  { label: '24h', value: '24h' },
+  { label: '7d', value: '7d' },
+  { label: '30d', value: '30d' },
+  { label: '90d', value: '90d' },
+]
+const metricOptions: { label: string; value: Metric }[] = [
+  { label: 'Moisture', value: 'moisture' },
+  { label: 'Temp', value: 'temp' },
+]
+
+const rangeToCells: Record<Range, number> = { '24h': 24, '7d': 7, '30d': 30, '90d': 90 }
+const rangeToMs: Record<Range, number> = {
+  '24h': 24 * 60 * 60 * 1000,
+  '7d': 7 * 24 * 60 * 60 * 1000,
+  '30d': 30 * 24 * 60 * 60 * 1000,
+  '90d': 90 * 24 * 60 * 60 * 1000,
+}
+
+const summary = computed(() => {
+  const statusCounts = plants.value.reduce(
+    (counts, plant) => {
+      counts[plant.readings.status] += 1
+      return counts
+    },
+    { healthy: 0, needs_attention: 0, critical: 0 } satisfies Record<PlantStatus, number>,
+  )
+
+  return {
+    plants_total: plants.value.length,
+    healthy: statusCounts.healthy,
+    needs_attention: statusCounts.needs_attention,
+    critical: statusCounts.critical,
+    devices_online: plants.value.filter((plant) => plant.device.online).length,
+    devices_total: plants.value.length,
+  }
+})
+
+function relativeTime(value: string | null): string {
+  if (!value) return 'never'
+
+  const diffMinutes = Math.max(0, Math.round((Date.now() - new Date(value).getTime()) / 60000))
+  if (diffMinutes < 1) return 'just now'
+  if (diffMinutes < 60) return `${diffMinutes} min ago`
+
+  const diffHours = Math.round(diffMinutes / 60)
+  if (diffHours < 24) return `${diffHours} h ago`
+
+  const diffDays = Math.round(diffHours / 24)
+  return `${diffDays} d ago`
+}
+
 function attentionDotColor(severity: Severity): string {
   return severity === 'offline' ? OFFLINE_CONFIG.color : STATUS_CONFIG[severity].color
 }
+
+function attentionIssue(plant: Plant, severity: Severity): string {
+  if (severity === 'offline') return 'Device offline'
+
+  const moisture = Math.round(plant.readings.moisture)
+  const threshold = plant.moistureThreshold ?? plant.settings.thresholds?.moisture_min
+
+  if (threshold != null && moisture < threshold) {
+    return `Soil moisture ${moisture}% below ${threshold}% target`
+  }
+
+  return STATUS_CONFIG[plant.readings.status].label
+}
+
+const attentionRows = computed<AttentionRow[]>(() =>
+  plants.value
+    .map((plant) => {
+      const severity: Severity | null = !plant.device.online
+        ? 'offline'
+        : plant.readings.status === 'healthy'
+          ? null
+          : plant.readings.status
+
+      if (!severity) return null
+
+      return {
+        id: plant.id,
+        severity,
+        plant: plant.custom_name,
+        issue: attentionIssue(plant, severity),
+        room: plant.room,
+        last_reading: relativeTime(plant.device.last_seen),
+      }
+    })
+    .filter((row): row is AttentionRow => row !== null),
+)
 
 const attentionColumns: DataTableColumns<AttentionRow> = [
   {
@@ -68,103 +164,76 @@ const attentionColumns: DataTableColumns<AttentionRow> = [
   { title: 'Last reading', key: 'last_reading' },
 ]
 
-const attentionRows: AttentionRow[] = [
-  {
-    id: 1,
-    severity: 'critical',
-    plant: 'My Monstera',
-    issue: 'Soil too dry (28%)',
-    room: 'Living Room',
-    last_reading: 'just now',
-  },
-  {
-    id: 2,
-    severity: 'needs_attention',
-    plant: 'My Snake Plant',
-    issue: 'Too cold (8°C)',
-    room: 'Bedroom',
-    last_reading: '1 min ago',
-  },
-  {
-    id: 3,
-    severity: 'offline',
-    plant: 'My Spider Plant',
-    issue: 'Device offline',
-    room: 'Kitchen',
-    last_reading: '3 h ago',
-  },
-  {
-    id: 4,
-    severity: 'needs_attention',
-    plant: 'My Fiddle Leaf',
-    issue: 'No water in 12 d',
-    room: 'Living Room',
-    last_reading: 'just now',
-  },
-]
-
-type Range = '24h' | '7d' | '30d' | '90d'
-const range = ref<Range>('7d')
-
-const rangeOptions: { label: string; value: Range }[] = [
-  { label: '24h', value: '24h' },
-  { label: '7d', value: '7d' },
-  { label: '30d', value: '30d' },
-  { label: '90d', value: '90d' },
-]
-
-type Metric = 'moisture' | 'temp'
-const heatmapMetric = ref<Metric>('moisture')
-const metricOptions: { label: string; value: Metric }[] = [
-  { label: 'Moisture', value: 'moisture' },
-  { label: 'Temp', value: 'temp' },
-]
-
-// --- Time-in-band heat map mock ---
-interface HeatmapRow {
-  plant: string
-  data: { moisture: (number | null)[]; temp: (number | null)[] }
+function readingsForRange(plantId: number): Measurement[] {
+  const cutoff = Date.now() - rangeToMs[range.value]
+  return (measurementsByPlant.value[plantId] ?? [])
+    .filter((measurement) => new Date(measurement.measuredAt).getTime() >= cutoff)
+    .sort((a, b) => new Date(a.measuredAt).getTime() - new Date(b.measuredAt).getTime())
 }
 
-function gen(n: number, baseline: number): (number | null)[] {
-  return Array.from({ length: n }, () => {
-    const v = Math.max(0, Math.min(1, baseline + (Math.random() - 0.5) * 0.5)) * 100
-    return Math.round(v)
+function bucketReadings<T>(
+  readings: Measurement[],
+  cells: number,
+  valueFor: (measurement: Measurement) => T | null,
+): (T | null)[] {
+  const cutoff = Date.now() - rangeToMs[range.value]
+  const bucketMs = rangeToMs[range.value] / cells
+
+  return Array.from({ length: cells }, (_, index) => {
+    const start = cutoff + index * bucketMs
+    const end = start + bucketMs
+    const bucket = readings.filter((reading) => {
+      const time = new Date(reading.measuredAt).getTime()
+      return time >= start && time < end
+    })
+    const values = bucket.map(valueFor).filter((value): value is T => value !== null)
+
+    if (values.length === 0) return null
+    return values[Math.floor(values.length / 2)] ?? null
   })
 }
-function offline(n: number): (number | null)[] {
-  const out: (number | null)[] = []
-  for (let i = 0; i < n; i++) out.push(null)
-  return out
-}
 
-const heatmapData: HeatmapRow[] = [
-  { plant: 'My Fiddle Leaf',  data: { moisture: gen(90, 0.85), temp: gen(90, 0.78) } },
-  { plant: 'My Snake Plant',  data: { moisture: gen(90, 0.45), temp: gen(90, 0.55) } },
-  { plant: 'My Spider Plant', data: { moisture: offline(90),   temp: offline(90)   } },
-  { plant: 'My Monstera',     data: { moisture: gen(90, 0.60), temp: gen(90, 0.65) } },
-]
+const heatmapData = computed<HeatmapRow[]>(() =>
+  plants.value.map((plant) => {
+    const readings = readingsForRange(plant.id)
+    const cells = rangeToCells[range.value]
+    const thresholds = plant.settings.thresholds
+    const moistureMin = thresholds?.moisture_min ?? 40
+    const moistureMax = thresholds?.moisture_max ?? 100
+    const tempMin = thresholds?.temp_min ?? 18
+    const tempMax = thresholds?.temp_max ?? 30
+    const moistureBuckets = bucketReadings(readings, cells, (reading) => reading.soilMoisture)
+    const tempBuckets = bucketReadings(readings, cells, (reading) => reading.temperature)
 
-const rangeToCells: Record<Range, number> = { '24h': 1, '7d': 7, '30d': 30, '90d': 90 }
+    return {
+      plant: plant.custom_name,
+      data: {
+        moisture: moistureBuckets.map((value) =>
+          value === null ? null : value >= moistureMin && value <= moistureMax ? 100 : 0,
+        ),
+        temp: tempBuckets.map((value) =>
+          value === null ? null : value >= tempMin && value <= tempMax ? 100 : 0,
+        ),
+      },
+    }
+  }),
+)
 
 const visibleHeatmap = computed(() =>
-  heatmapData.map((r) => ({
-    plant: r.plant,
-    cells: r.data[heatmapMetric.value].slice(-rangeToCells[range.value]),
+  heatmapData.value.map((row) => ({
+    plant: row.plant,
+    cells: row.data[heatmapMetric.value],
   })),
 )
 
-// Squares, sized so the row fits without scrolling. Larger cap at sparser
-// ranges so day-name labels still fit at 7d.
 const cellSize = computed(() => {
   const n = rangeToCells[range.value]
   return Math.max(6, Math.min(30, Math.floor(420 / n)))
 })
 
-// Metric drives the hue: moisture → blue, temp → orange. Five opacity steps each.
 const METRIC_RGB: Record<Metric, string> = {
-  moisture: '59, 130, 246', // blue-500  (#3b82f6)
-  temp: '249, 115, 22', // orange-500 (#f97316)
+  moisture: '59, 130, 246',
+  temp: '249, 115, 22',
 }
 const shades = computed<[string, string, string, string, string]>(() => {
   const rgb = METRIC_RGB[heatmapMetric.value]
@@ -176,13 +245,13 @@ const shades = computed<[string, string, string, string, string]>(() => {
     `rgba(${rgb}, 1)`,
   ]
 })
-function cellColor(v: number | null): string {
-  if (v === null) return 'var(--neutral-400)'
+function cellColor(value: number | null): string {
+  if (value === null) return 'var(--neutral-400)'
   const s = shades.value
-  if (v >= 80) return s[4]
-  if (v >= 60) return s[3]
-  if (v >= 40) return s[2]
-  if (v >= 20) return s[1]
+  if (value >= 80) return s[4]
+  if (value >= 60) return s[3]
+  if (value >= 40) return s[2]
+  if (value >= 20) return s[1]
   return s[0]
 }
 
@@ -197,58 +266,34 @@ const dayLabels = computed<string[]>(() => {
   }
   return out
 })
-function cellTitle(v: number | null): string {
-  return v === null ? 'Offline' : `${v}% in band`
+function cellTitle(value: number | null): string {
+  return value === null ? 'No reading' : `${value}% in band`
 }
 function rowAverage(cells: (number | null)[]): string {
-  const valid = cells.filter((c): c is number => c !== null)
-  if (valid.length === 0) return '— offline'
-  const avg = Math.round(valid.reduce((a, b) => a + b, 0) / valid.length)
-  return `${avg}%`
+  const valid = cells.filter((cell): cell is number => cell !== null)
+  if (valid.length === 0) return '- no data'
+  return `${Math.round(valid.reduce((a, b) => a + b, 0) / valid.length)}%`
 }
 
-// --- Trends across the fleet -------------------------------------------------
-interface TrendRow {
-  plant: string
-  color: string
-  moisture: number[]
-  temp: number[]
-}
+const TREND_COLORS = ['#3b82f6', '#22c55e', '#f97316', '#a855f7', '#14b8a6', '#ef4444']
+const trendsData = computed<TrendRow[]>(() =>
+  plants.value.map((plant, index) => {
+    const readings = readingsForRange(plant.id)
+    return {
+      plant: plant.custom_name,
+      color: TREND_COLORS[index % TREND_COLORS.length] ?? '#3b82f6',
+      moisture: readings
+        .map((reading) => reading.soilMoisture)
+        .filter((value): value is number => value !== null),
+      temp: readings
+        .map((reading) => reading.temperature)
+        .filter((value): value is number => value !== null),
+    }
+  }),
+)
 
-function trendGen(n: number, baseline: number, amplitude: number, jitter: number): number[] {
-  return Array.from({ length: n }, (_, i) => {
-    const v = baseline + Math.sin(i / 4) * amplitude + (Math.random() - 0.5) * jitter
-    return Math.round(v * 10) / 10
-  })
-}
-
-// Colors taken from the wireframe (Fiddle blue, Snake green, Monstera orange).
-const trendsData: TrendRow[] = [
-  {
-    plant: 'My Fiddle Leaf',
-    color: '#3b82f6',
-    moisture: trendGen(90, 65, 8, 6),
-    temp: trendGen(90, 22, 1.5, 1),
-  },
-  {
-    plant: 'My Snake Plant',
-    color: '#22c55e',
-    moisture: trendGen(90, 30, 5, 4),
-    temp: trendGen(90, 19, 1, 0.8),
-  },
-  {
-    plant: 'My Monstera',
-    color: '#f97316',
-    moisture: trendGen(90, 50, 12, 8),
-    temp: trendGen(90, 26, 2.5, 1.5),
-  },
-]
-
-// Y-axis ticks per chart (top → bottom, must match the dMin/dMax used in trendPath).
 const moistureYTicks = [100, 50, 0]
 const tempYTicks = [35, 22, 10]
-
-// X-axis ticks scale with the active range (start → mid → now).
 const X_AXIS_LABELS: Record<Range, string[]> = {
   '24h': ['24h ago', '12h ago', 'now'],
   '7d': ['7d ago', '3d ago', 'now'],
@@ -260,44 +305,43 @@ const xAxisLabels = computed<string[]>(() => X_AXIS_LABELS[range.value])
 const TRENDS_W = 600
 const TRENDS_H = 120
 
-function trendPath(values: number[], dMin: number, dMax: number, count: number): string {
-  const sliced = values.slice(-count)
-  const last = sliced.length - 1 || 1
-  return sliced
-    .map((v, i) => {
-      const x = (i / last) * TRENDS_W
-      const y = TRENDS_H - ((v - dMin) / (dMax - dMin)) * TRENDS_H
+function trendPath(values: number[], dMin: number, dMax: number): string {
+  if (values.length === 0) return ''
+
+  const last = values.length - 1 || 1
+  return values
+    .map((value, index) => {
+      const x = (index / last) * TRENDS_W
+      const clamped = Math.max(dMin, Math.min(dMax, value))
+      const y = TRENDS_H - ((clamped - dMin) / (dMax - dMin)) * TRENDS_H
       return `${x.toFixed(1)},${y.toFixed(1)}`
     })
     .join(' ')
 }
 
-const visibleTrends = computed(() => {
-  const n = rangeToCells[range.value]
-  return trendsData.map((t) => ({
-    plant: t.plant,
-    color: t.color,
-    moistureLine: trendPath(t.moisture, 0, 100, n),
-    tempLine: trendPath(t.temp, 10, 35, n),
-  }))
-})
+const visibleTrends = computed(() =>
+  trendsData.value.map((trend) => ({
+    plant: trend.plant,
+    color: trend.color,
+    moistureLine: trendPath(trend.moisture, 0, 100),
+    tempLine: trendPath(trend.temp, 10, 35),
+  })),
+)
 
-// --- Devices -----------------------------------------------------------------
-interface DeviceRow {
-  id: number
-  device: string
-  plant: string
-  online: boolean
-  firmware: string
-  last_seen: string
-}
+const hasTrendData = computed(() =>
+  visibleTrends.value.some((trend) => trend.moistureLine.length > 0 || trend.tempLine.length > 0),
+)
 
-const deviceRows: DeviceRow[] = [
-  { id: 1, device: 'Pico-01', plant: 'My Fiddle Leaf',  online: true,  firmware: 'v0.4.1', last_seen: '2 min ago' },
-  { id: 2, device: 'Pico-02', plant: 'My Snake Plant',  online: true,  firmware: 'v0.4.1', last_seen: '1 min ago' },
-  { id: 3, device: 'Pico-03', plant: 'My Spider Plant', online: false, firmware: 'v0.3.8', last_seen: '3 h ago' },
-  { id: 4, device: 'Pico-04', plant: 'My Monstera',     online: true,  firmware: 'v0.4.1', last_seen: '2 min ago' },
-]
+const deviceRows = computed<DeviceRow[]>(() =>
+  plants.value.map((plant) => ({
+    id: plant.id,
+    device: plant.device.name,
+    plant: plant.custom_name,
+    online: plant.device.online,
+    firmware: plant.device.firmware ?? '-',
+    last_seen: relativeTime(plant.device.last_seen),
+  })),
+)
 
 const deviceColumns: DataTableColumns<DeviceRow> = [
   { title: 'Device', key: 'device' },
@@ -321,13 +365,40 @@ const deviceColumns: DataTableColumns<DeviceRow> = [
   },
   { title: 'Firmware', key: 'firmware' },
   { title: 'Last seen', key: 'last_seen' },
-  {
-    title: '',
-    key: 'actions',
-    render: (row) =>
-      row.online ? '' : h(NButton, { size: 'tiny', secondary: true }, () => 'Re-pair'),
-  },
 ]
+
+async function loadVitals() {
+  loading.value = true
+  error.value = null
+
+  try {
+    const backendPlants = await api.getPlants()
+    const mappedPlants = await Promise.all(
+      backendPlants.map(async (backendPlant) => {
+        const latestMeasurement = await api.getLatestMeasurement(backendPlant.id).catch(() => null)
+        return mapBackendPlantToPlant(backendPlant, latestMeasurement)
+      }),
+    )
+
+    plants.value = mappedPlants
+
+    const measurementEntries = await Promise.all(
+      mappedPlants.map(async (plant) => {
+        const readings = await api.getMeasurements(plant.id).catch(() => [])
+        return [plant.id, readings] as const
+      }),
+    )
+
+    measurementsByPlant.value = Object.fromEntries(measurementEntries)
+  } catch (err) {
+    console.error(err)
+    error.value = 'Could not load vitals from the backend.'
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(loadVitals)
 </script>
 
 <template>
@@ -335,199 +406,192 @@ const deviceColumns: DataTableColumns<DeviceRow> = [
     <div class="view-header">
       <h1>Vitals</h1>
     </div>
-    <n-radio-group class="range-control" v-model:value="range" size="small">
-      <n-radio-button class="rangeOptions" v-for="o in rangeOptions" :key="o.value" :value="o.value">
+    <n-radio-group v-model:value="range" class="range-control" size="small">
+      <n-radio-button
+        v-for="o in rangeOptions"
+        :key="o.value"
+        class="rangeOptions"
+        :value="o.value"
+      >
         {{ o.label }}
       </n-radio-button>
     </n-radio-group>
     <div class="vitals-content">
-      <!-- Fleet status -->
-      <n-divider title-placement="left">Fleet Status</n-divider>
-      <div class="stat-strip">
-        <n-statistic label="Plants" :value="summary.plants_total" />
+      <n-alert v-if="error" type="error" :bordered="false">
+        {{ error }}
+      </n-alert>
 
-        <n-statistic label="Healthy" :value="summary.healthy">
-          <template #suffix>
-            <span v-if="healthyDelta" :class="`delta delta--${healthyDelta.tone}`">
-              {{ healthyDelta.display }}
-            </span>
-          </template>
-        </n-statistic>
+      <n-spin v-else :show="loading">
+        <n-divider title-placement="left">Fleet Status</n-divider>
+        <div class="stat-strip">
+          <n-statistic label="Plants" :value="summary.plants_total" />
+          <n-statistic label="Healthy" :value="summary.healthy" />
+          <n-statistic label="Needs attention" :value="summary.needs_attention" />
+          <n-statistic label="Critical" :value="summary.critical" />
+          <n-statistic label="Devices online">
+            {{ summary.devices_online }}<span class="muted">/{{ summary.devices_total }}</span>
+          </n-statistic>
+        </div>
 
-        <n-statistic label="Needs attention" :value="summary.needs_attention">
-          <template #suffix>
-            <span v-if="attentionDelta" :class="`delta delta--${attentionDelta.tone}`">
-              {{ attentionDelta.display }}
-            </span>
-          </template>
-        </n-statistic>
+        <div class="section-row">
+          <n-divider title-placement="left" class="section-row__divider">
+            Needs Attention now
+          </n-divider>
+        </div>
+        <n-data-table
+          v-if="attentionRows.length > 0"
+          :columns="attentionColumns"
+          :data="attentionRows"
+          size="small"
+          :pagination="false"
+        />
+        <n-empty v-else description="No plants need attention." size="small" />
 
-        <n-statistic label="Critical" :value="summary.critical">
-          <template #suffix>
-            <span v-if="criticalDelta" :class="`delta delta--${criticalDelta.tone}`">
-              {{ criticalDelta.display }}
-            </span>
-          </template>
-        </n-statistic>
+        <div class="section-row">
+          <n-divider title-placement="left" class="section-row__divider">
+            Time in band ({{ range }})
+          </n-divider>
+          <n-text depth="3">Metric:</n-text>
+          <n-radio-group v-model:value="heatmapMetric" size="small">
+            <n-radio v-for="o in metricOptions" :key="o.value" :value="o.value">
+              {{ o.label }}
+            </n-radio>
+          </n-radio-group>
+        </div>
 
-        <n-statistic label="Devices online">
-          {{ summary.devices_online }}<span class="muted">/{{ summary.devices_total }}</span>
-        </n-statistic>
-      </div>
-
-      <!-- Attention -->
-      <div class="section-row">
-        <n-divider title-placement="left" class="section-row__divider">
-          Needs Attention now
-        </n-divider>
-        <n-button text size="small">View all activity ›</n-button>
-      </div>
-      <n-data-table
-        :columns="attentionColumns"
-        :data="attentionRows"
-        size="small"
-        :pagination="false"
-      />
-
-      <!-- Time in band -->
-      <div class="section-row">
-        <n-divider title-placement="left" class="section-row__divider">
-          Time in band ({{ range }})
-        </n-divider>
-        <n-text depth="3">Metric:</n-text>
-        <n-radio-group v-model:value="heatmapMetric" size="small">
-          <n-radio v-for="o in metricOptions" :key="o.value" :value="o.value">
-            {{ o.label }}
-          </n-radio>
-        </n-radio-group>
-      </div>
-
-      <div class="heatmap">
-        <div v-if="range === '7d'" class="heatmap-row heatmap-row--header">
-          <div class="heatmap-row__label"></div>
-          <div class="heatmap-row__cells">
-            <div
-              v-for="(l, i) in dayLabels"
-              :key="i"
-              class="heatmap-cell-label"
-              :style="{ width: cellSize + 'px' }"
-            >
-              {{ l }}
+        <div class="heatmap">
+          <div v-if="range === '7d'" class="heatmap-row heatmap-row--header">
+            <div class="heatmap-row__label"></div>
+            <div class="heatmap-row__cells">
+              <div
+                v-for="(label, i) in dayLabels"
+                :key="i"
+                class="heatmap-cell-label"
+                :style="{ width: cellSize + 'px' }"
+              >
+                {{ label }}
+              </div>
             </div>
+            <div class="heatmap-row__total">In band</div>
           </div>
-          <div class="heatmap-row__total">In band</div>
-        </div>
-        <div v-for="row in visibleHeatmap" :key="row.plant" class="heatmap-row">
-          <div class="heatmap-row__label">{{ row.plant }}</div>
-          <div class="heatmap-row__cells">
-            <div
-              v-for="(c, i) in row.cells"
-              :key="i"
-              class="heatmap-cell"
-              :style="{
-                width: cellSize + 'px',
-                height: cellSize + 'px',
-                background: cellColor(c),
-              }"
-              :title="cellTitle(c)"
-            />
-          </div>
-          <div class="heatmap-row__total">{{ rowAverage(row.cells) }}</div>
-        </div>
-        <div class="heatmap-legend">
-          <span class="heatmap-legend__title">% time in band:</span>
-          <span class="heatmap-legend__item">
-            <span class="heatmap-legend__swatch" :style="{ background: shades[0] }"></span>
-            0&ndash;19
-          </span>
-          <span class="heatmap-legend__item">
-            <span class="heatmap-legend__swatch" :style="{ background: shades[1] }"></span>
-            20&ndash;39
-          </span>
-          <span class="heatmap-legend__item">
-            <span class="heatmap-legend__swatch" :style="{ background: shades[2] }"></span>
-            40&ndash;59
-          </span>
-          <span class="heatmap-legend__item">
-            <span class="heatmap-legend__swatch" :style="{ background: shades[3] }"></span>
-            60&ndash;79
-          </span>
-          <span class="heatmap-legend__item">
-            <span class="heatmap-legend__swatch" :style="{ background: shades[4] }"></span>
-            80&ndash;100
-          </span>
-          <span class="heatmap-legend__item heatmap-legend__item--offline">
-            <span class="heatmap-legend__swatch" style="background: var(--neutral-400)"></span>
-            Offline
-          </span>
-        </div>
-      </div>
-
-      <!-- Trends -->
-      <n-divider title-placement="left">Trends across the fleet</n-divider>
-      <div class="trends-legend">
-        <span v-for="t in trendsData" :key="t.plant" class="trends-legend__item">
-          <span class="trends-legend__dot" :style="{ background: t.color }"></span>
-          {{ t.plant }}
-        </span>
-      </div>
-      <div class="trend-chart">
-        <div class="trend-chart__title">Moisture (%)</div>
-        <div class="trend-chart__body">
-          <div class="trend-chart__y-axis">
-            <span v-for="tick in moistureYTicks" :key="tick">{{ tick }}</span>
-          </div>
-          <div class="trend-chart__plot">
-            <svg viewBox="0 0 600 120" preserveAspectRatio="none" class="trend-chart__svg">
-              <polyline
-                v-for="t in visibleTrends"
-                :key="t.plant"
-                :points="t.moistureLine"
-                fill="none"
-                :stroke="t.color"
-                stroke-width="1.5"
-                vector-effect="non-scaling-stroke"
+          <div v-for="row in visibleHeatmap" :key="row.plant" class="heatmap-row">
+            <div class="heatmap-row__label">{{ row.plant }}</div>
+            <div class="heatmap-row__cells">
+              <div
+                v-for="(cell, i) in row.cells"
+                :key="i"
+                class="heatmap-cell"
+                :style="{
+                  width: cellSize + 'px',
+                  height: cellSize + 'px',
+                  background: cellColor(cell),
+                }"
+                :title="cellTitle(cell)"
               />
-            </svg>
-            <div class="trend-chart__x-axis">
-              <span v-for="(l, i) in xAxisLabels" :key="i">{{ l }}</span>
             </div>
+            <div class="heatmap-row__total">{{ rowAverage(row.cells) }}</div>
+          </div>
+          <n-empty
+            v-if="visibleHeatmap.length === 0"
+            description="No plant readings yet."
+            size="small"
+          />
+          <div class="heatmap-legend">
+            <span class="heatmap-legend__title">% time in band:</span>
+            <span class="heatmap-legend__item">
+              <span class="heatmap-legend__swatch" :style="{ background: shades[0] }"></span>
+              0-19
+            </span>
+            <span class="heatmap-legend__item">
+              <span class="heatmap-legend__swatch" :style="{ background: shades[1] }"></span>
+              20-39
+            </span>
+            <span class="heatmap-legend__item">
+              <span class="heatmap-legend__swatch" :style="{ background: shades[2] }"></span>
+              40-59
+            </span>
+            <span class="heatmap-legend__item">
+              <span class="heatmap-legend__swatch" :style="{ background: shades[3] }"></span>
+              60-79
+            </span>
+            <span class="heatmap-legend__item">
+              <span class="heatmap-legend__swatch" :style="{ background: shades[4] }"></span>
+              80-100
+            </span>
+            <span class="heatmap-legend__item heatmap-legend__item--offline">
+              <span class="heatmap-legend__swatch" style="background: var(--neutral-400)"></span>
+              No reading
+            </span>
           </div>
         </div>
-      </div>
-      <div class="trend-chart">
-        <div class="trend-chart__title">Temperature (°C)</div>
-        <div class="trend-chart__body">
-          <div class="trend-chart__y-axis">
-            <span v-for="tick in tempYTicks" :key="tick">{{ tick }}</span>
-          </div>
-          <div class="trend-chart__plot">
-            <svg viewBox="0 0 600 120" preserveAspectRatio="none" class="trend-chart__svg">
-              <polyline
-                v-for="t in visibleTrends"
-                :key="t.plant"
-                :points="t.tempLine"
-                fill="none"
-                :stroke="t.color"
-                stroke-width="1.5"
-                vector-effect="non-scaling-stroke"
-              />
-            </svg>
-            <div class="trend-chart__x-axis">
-              <span v-for="(l, i) in xAxisLabels" :key="i">{{ l }}</span>
-            </div>
-          </div>
-        </div>
-      </div>
 
-      <!-- Devices -->
-      <n-divider title-placement="left">Devices</n-divider>
-      <n-data-table
-        :columns="deviceColumns"
-        :data="deviceRows"
-        size="small"
-        :pagination="false"
-      />
+        <n-divider title-placement="left">Trends across the fleet</n-divider>
+        <div v-if="hasTrendData">
+          <div class="trends-legend">
+            <span v-for="trend in trendsData" :key="trend.plant" class="trends-legend__item">
+              <span class="trends-legend__dot" :style="{ background: trend.color }"></span>
+              {{ trend.plant }}
+            </span>
+          </div>
+          <div class="trend-chart">
+            <div class="trend-chart__title">Moisture (%)</div>
+            <div class="trend-chart__body">
+              <div class="trend-chart__y-axis">
+                <span v-for="tick in moistureYTicks" :key="tick">{{ tick }}</span>
+              </div>
+              <div class="trend-chart__plot">
+                <svg viewBox="0 0 600 120" preserveAspectRatio="none" class="trend-chart__svg">
+                  <polyline
+                    v-for="trend in visibleTrends"
+                    :key="trend.plant"
+                    :points="trend.moistureLine"
+                    fill="none"
+                    :stroke="trend.color"
+                    stroke-width="1.5"
+                    vector-effect="non-scaling-stroke"
+                  />
+                </svg>
+                <div class="trend-chart__x-axis">
+                  <span v-for="(label, i) in xAxisLabels" :key="i">{{ label }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="trend-chart">
+            <div class="trend-chart__title">Temperature (deg C)</div>
+            <div class="trend-chart__body">
+              <div class="trend-chart__y-axis">
+                <span v-for="tick in tempYTicks" :key="tick">{{ tick }}</span>
+              </div>
+              <div class="trend-chart__plot">
+                <svg viewBox="0 0 600 120" preserveAspectRatio="none" class="trend-chart__svg">
+                  <polyline
+                    v-for="trend in visibleTrends"
+                    :key="trend.plant"
+                    :points="trend.tempLine"
+                    fill="none"
+                    :stroke="trend.color"
+                    stroke-width="1.5"
+                    vector-effect="non-scaling-stroke"
+                  />
+                </svg>
+                <div class="trend-chart__x-axis">
+                  <span v-for="(label, i) in xAxisLabels" :key="i">{{ label }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <n-empty v-else description="No measurement history for this range." size="small" />
+
+        <n-divider title-placement="left">Devices</n-divider>
+        <n-data-table
+          :columns="deviceColumns"
+          :data="deviceRows"
+          size="small"
+          :pagination="false"
+        />
+      </n-spin>
     </div>
   </section>
 </template>
@@ -540,20 +604,14 @@ const deviceColumns: DataTableColumns<DeviceRow> = [
   margin-bottom: 3rem;
 }
 
-/* Only the range selector sticks (the title scrolls away). It lives in the
-   tall .vitals-view so it isn't released when the header scrolls off. No
-   background needed — the radio buttons are opaque on their own. The negative
-   top margin tucks it back up onto the title's row in the resting state. */
 .range-control {
   position: sticky;
   top: 0.5rem;
   z-index: 20;
   display: flex;
   justify-content: flex-end;
-  /* tuck up onto the title's row in the resting state */
   margin-top: -5rem;
   margin-bottom: 2rem;
-  /* the empty area left of the buttons must not block clicks on the title */
   pointer-events: none;
 }
 .range-control :deep(.n-radio-button) {
@@ -573,18 +631,6 @@ const deviceColumns: DataTableColumns<DeviceRow> = [
   padding: 0.75rem 1rem;
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-md);
-}
-
-.delta {
-  font-size: 0.75rem;
-  margin-left: 0.4rem;
-  font-weight: 600;
-}
-.delta--good {
-  color: var(--success);
-}
-.delta--bad {
-  color: var(--danger);
 }
 
 .muted {

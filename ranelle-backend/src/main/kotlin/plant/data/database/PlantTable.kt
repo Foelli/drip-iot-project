@@ -17,6 +17,13 @@ object PlantsTable : Table("plants") {
     val moistureThreshold = integer("moisture_threshold").default(35)
     val pumpDurationMs = integer("pump_duration_ms").default(2000)
     val waterSettleMs = integer("water_settle_ms").default(20000)
+    val idealMoistureMin = integer("ideal_moisture_min").default(35)
+    val idealMoistureMax = integer("ideal_moisture_max").default(100)
+    val idealTempMin = integer("ideal_temp_min").default(18)
+    val idealTempMax = integer("ideal_temp_max").default(30)
+    val idealAirMoistureMin = integer("ideal_air_moisture_min").default(40)
+    val idealAirMoistureMax = integer("ideal_air_moisture_max").default(70)
+    val careNotes = text("care_notes").nullable()
 
     override val primaryKey = PrimaryKey(id)
 }

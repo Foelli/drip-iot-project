@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { api, type WateringEvent } from '@/api/client'
+import { mapBackendPlantToPlant } from '@/api/mappers'
 import { OFFLINE_CONFIG, STATUS_CONFIG } from '@/components/plants/plantDisplay'
+import type { Plant, PlantStatus } from '@/types/Plant'
 
 defineOptions({ name: 'OverviewView' })
 
@@ -24,7 +27,11 @@ const dateLabel = now.toLocaleDateString('en-US', {
   day: 'numeric',
 })
 
-// --- Care queue (mock) -------------------------------------------------------
+const plants = ref<Plant[]>([])
+const wateringEvents = ref<WateringEvent[]>([])
+const loading = ref(false)
+const error = ref<string | null>(null)
+
 type Severity = 'critical' | 'needs_attention' | 'offline'
 interface CareItem {
   plant_id: number
@@ -33,33 +40,53 @@ interface CareItem {
   reason: string
 }
 
-const careItems: CareItem[] = [
-  {
-    plant_id: 4,
-    plant: 'My Monstera',
-    severity: 'critical',
-    reason: 'Soil too dry (28%) — water now',
-  },
-  {
-    plant_id: 2,
-    plant: 'My Snake Plant',
-    severity: 'needs_attention',
-    reason: 'Too cold (8°C) — move out of draft',
-  },
-  {
-    plant_id: 3,
-    plant: 'My Spider Plant',
-    severity: 'offline',
-    reason: 'Device offline 3 h — re-pair',
-  },
-]
-
 function severityColor(s: Severity): string {
   return s === 'offline' ? OFFLINE_CONFIG.color : STATUS_CONFIG[s].color
 }
 
+function careReason(plant: Plant, severity: Severity): string {
+  if (severity === 'offline') return 'Device has not reported yet'
+
+  const threshold = plant.moistureThreshold ?? plant.settings.thresholds?.moisture_min
+  const moisture = Math.round(plant.readings.moisture)
+
+  if (threshold != null && moisture < threshold) {
+    return `Soil moisture is ${moisture}% (target ${threshold}%+)`
+  }
+
+  return `${STATUS_CONFIG[plant.readings.status].label} based on latest reading`
+}
+
+const careItems = computed<CareItem[]>(() =>
+  plants.value
+    .map((plant) => {
+      if (!plant.device.online) {
+        return {
+          plant_id: plant.id,
+          plant: plant.custom_name,
+          severity: 'offline',
+          reason: careReason(plant, 'offline'),
+        }
+      }
+
+      if (plant.readings.status === 'healthy') return null
+
+      const severity = plant.readings.status
+      return {
+        plant_id: plant.id,
+        plant: plant.custom_name,
+        severity,
+        reason: careReason(plant, severity),
+      }
+    })
+    .filter((item): item is CareItem => item !== null),
+)
+
 const statusLine = computed(() => {
-  const n = careItems.length
+  if (loading.value) return 'Checking your plants now.'
+  if (error.value) return 'Could not reach the plant backend.'
+
+  const n = careItems.value.length
   if (n === 0) return 'All plants are doing well today.'
   return `${n} plant${n === 1 ? '' : 's'} need a quick look today.`
 })
@@ -71,39 +98,118 @@ function goToVitals() {
   router.push('/vitals')
 }
 
-// --- Fleet summary -----------------------------------------------------------
-const fleet = {
-  healthy: 8,
-  healthy_delta: 1,
-  attention: 3,
-  attention_delta: 2,
-  critical: 1,
-  devices_online: 10,
-  devices_total: 12,
-}
+const fleet = computed(() => {
+  const statusCounts = plants.value.reduce(
+    (counts, plant) => {
+      counts[plant.readings.status] += 1
+      return counts
+    },
+    { healthy: 0, needs_attention: 0, critical: 0 } satisfies Record<PlantStatus, number>,
+  )
 
-// --- Recent activity ---------------------------------------------------------
+  return {
+    healthy: statusCounts.healthy,
+    attention: statusCounts.needs_attention,
+    critical: statusCounts.critical,
+    devices_online: plants.value.filter((plant) => plant.device.online).length,
+    devices_total: plants.value.length,
+  }
+})
+
 interface ActivityRow {
   plant_id: number
   plant: string
   body: string
   when: string
 }
-const activity: ActivityRow[] = [
-  { plant_id: 1, plant: 'Fiddle Leaf', body: 'Watered (+24 pts)', when: '09:14' },
-  { plant_id: 1, plant: 'Fiddle Leaf', body: 'Note: looks happier near the window', when: '08:02' },
-  { plant_id: 4, plant: 'Monstera', body: 'Moved: Bedroom → Living Room', when: 'Yesterday' },
-  { plant_id: 2, plant: 'Snake Plant', body: 'Repotted to 6" terra cotta', when: '5d ago' },
-]
 
-const journalAnchor = computed(() => activity[0]?.plant_id ?? 1)
+function relativeTime(value: string): string {
+  const then = new Date(value).getTime()
+  const diffMs = Date.now() - then
+  const diffMinutes = Math.max(0, Math.round(diffMs / 60000))
 
-// --- Watering this week ------------------------------------------------------
-// Mon..Sun, mock counts. Bars scale to the busiest day.
-const weeklyWaterings = [1, 2, 4, 1, 2, 0, 1]
-const weeklyTotal = weeklyWaterings.reduce((a, b) => a + b, 0)
-const weeklyMax = Math.max(...weeklyWaterings, 1)
+  if (diffMinutes < 1) return 'now'
+  if (diffMinutes < 60) return `${diffMinutes}m ago`
+
+  const diffHours = Math.round(diffMinutes / 60)
+  if (diffHours < 24) return `${diffHours}h ago`
+
+  const diffDays = Math.round(diffHours / 24)
+  return `${diffDays}d ago`
+}
+
+const plantNameById = computed(
+  () => new Map(plants.value.map((plant) => [plant.id, plant.custom_name])),
+)
+const activity = computed<ActivityRow[]>(() =>
+  [...wateringEvents.value]
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, 4)
+    .map((event) => ({
+      plant_id: event.plantId,
+      plant: plantNameById.value.get(event.plantId) ?? `Plant ${event.plantId}`,
+      body:
+        event.moistureBefore == null
+          ? `Watered for ${Math.round(event.pumpDurationMs / 1000)}s`
+          : `Watered at ${Math.round(event.moistureBefore)}% moisture`,
+      when: relativeTime(event.createdAt),
+    })),
+)
+
+const activityAnchor = computed(() => activity.value[0]?.plant_id ?? plants.value[0]?.id ?? 1)
+
+const weeklyWaterings = computed(() => {
+  const days: number[] = Array.from({ length: 7 }, () => 0)
+  const today = new Date()
+
+  for (const event of wateringEvents.value) {
+    const eventDate = new Date(event.createdAt)
+    const diffDays = Math.floor(
+      (Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()) -
+        Date.UTC(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate())) /
+        86400000,
+    )
+
+    if (diffDays >= 0 && diffDays < 7) {
+      days[6 - diffDays] = (days[6 - diffDays] ?? 0) + 1
+    }
+  }
+
+  return days
+})
+const weeklyTotal = computed(() => weeklyWaterings.value.reduce((a, b) => a + b, 0))
+const weeklyMax = computed(() => Math.max(...weeklyWaterings.value, 1))
 const dayLetters = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
+
+async function loadOverview() {
+  loading.value = true
+  error.value = null
+
+  try {
+    const backendPlants = await api.getPlants()
+    const mappedPlants = await Promise.all(
+      backendPlants.map(async (backendPlant) => {
+        const latestMeasurement = await api.getLatestMeasurement(backendPlant.id).catch(() => null)
+
+        return mapBackendPlantToPlant(backendPlant, latestMeasurement)
+      }),
+    )
+
+    plants.value = mappedPlants
+
+    const eventsByPlant = await Promise.all(
+      mappedPlants.map((plant) => api.getWateringEvents(plant.id).catch(() => [])),
+    )
+    wateringEvents.value = eventsByPlant.flat()
+  } catch (err) {
+    console.error(err)
+    error.value = 'Could not load overview from the backend.'
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(loadOverview)
 </script>
 
 <template>
@@ -114,53 +220,27 @@ const dayLetters = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
     </div>
 
     <div class="overview-grid">
-      <!-- Care queue -------------------------------------------------------
-        FUTURE: derive items from the backend, not just from moisture/temp.
-
-        Specifically, when a water command was sent but soil moisture didn't
-        rise within ~N minutes, surface a "Watering had no effect" item here.
-
-        From the soil sensor's POV three failure classes look identical:
-          1. Reservoir empty — pump fired into air
-          2. Battery dying  — pump didn't actually run, or ran too weakly
-          3. Clogged tube / dislodged emitter — water flowed but didn't reach
-             this plant
-
-        --- Option A: battery voltage (zero extra hardware on Pico W) ---
-        The Pico W can already read its system supply voltage on ADC channel
-        3 (the on-board VSYS divider). No extra components, just firmware:
-          - Sample VSYS once per telemetry cycle, report `battery_v`.
-          - Healthy LiPo sits ~3.7–4.2 V; below ~3.3 V the LDO struggles to
-            drive the pump motor.
-          - Also sample DURING the pump pulse — a battery that's OK at rest
-            but droops under load is a classic dying-cell signature.
-        This alone splits "device dying" from "everything else" and is the
-        recommended first step because it's free.
-
-        Other options once we want to fully disambiguate (1) vs (3):
-          - reservoir float switch (one GPIO, ~€2) — deterministic
-          - pump current sense via INA219 (~€3, I²C) — also catches dry-run
-            during the first pulse instead of waiting on moisture.
-
-        Until any of that lands we can only show "Watering had no effect —
-        check the reservoir or device" as a single combined item.
-      -->
       <article class="tile tile--care">
         <header class="tile__header">
           <h2>Today ({{ careItems.length }})</h2>
           <n-button text size="small" @click="goToVitals">See all →</n-button>
         </header>
-        <ul v-if="careItems.length > 0" class="care-list">
-          <li v-for="c in careItems" :key="c.plant_id" class="care-item">
-            <span class="care-dot" :style="{ background: severityColor(c.severity) }"></span>
-            <div class="care-text">
-              <div class="care-name">{{ c.plant }}</div>
-              <div class="care-reason">{{ c.reason }}</div>
-            </div>
-            <n-button text size="small" @click="openPlant(c.plant_id)">Go →</n-button>
-          </li>
-        </ul>
-        <n-empty v-else description="Nothing to do — every plant is happy." size="small" />
+        <n-alert v-if="error" type="error" :bordered="false">
+          {{ error }}
+        </n-alert>
+        <n-spin v-else :show="loading">
+          <ul v-if="careItems.length > 0" class="care-list">
+            <li v-for="c in careItems" :key="c.plant_id" class="care-item">
+              <span class="care-dot" :style="{ background: severityColor(c.severity) }"></span>
+              <div class="care-text">
+                <div class="care-name">{{ c.plant }}</div>
+                <div class="care-reason">{{ c.reason }}</div>
+              </div>
+              <n-button text size="small" @click="openPlant(c.plant_id)">Go →</n-button>
+            </li>
+          </ul>
+          <n-empty v-else description="Nothing to do — every plant is happy." size="small" />
+        </n-spin>
       </article>
 
       <!-- Fleet status ----------------------------------------------------- -->
@@ -173,12 +253,10 @@ const dayLetters = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
           <li>
             <span class="fleet-num">{{ fleet.healthy }}</span>
             <span class="fleet-label">Healthy</span>
-            <span class="delta delta--good">▲{{ fleet.healthy_delta }}</span>
           </li>
           <li>
             <span class="fleet-num">{{ fleet.attention }}</span>
             <span class="fleet-label">Needs attention</span>
-            <span class="delta delta--bad">▲{{ fleet.attention_delta }}</span>
           </li>
           <li>
             <span class="fleet-num">{{ fleet.critical }}</span>
@@ -197,11 +275,9 @@ const dayLetters = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
       <article class="tile">
         <header class="tile__header">
           <h2>Recent activity</h2>
-          <n-button text size="small" @click="openPlant(journalAnchor)">
-            Open journal →
-          </n-button>
+          <n-button text size="small" @click="openPlant(activityAnchor)"> Open plant → </n-button>
         </header>
-        <ul class="activity-list">
+        <ul v-if="activity.length > 0" class="activity-list">
           <li
             v-for="(a, i) in activity"
             :key="i"
@@ -214,6 +290,7 @@ const dayLetters = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
             </span>
           </li>
         </ul>
+        <n-empty v-else description="No watering activity yet." size="small" />
       </article>
 
       <!-- Watering this week ----------------------------------------------- -->

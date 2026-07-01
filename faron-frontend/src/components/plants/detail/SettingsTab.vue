@@ -13,12 +13,13 @@ const saving = ref(false)
 const DEFAULTS = {
   custom_name: props.plant.custom_name,
   room: props.plant.room,
-  moisture_min: props.plant.moistureThreshold ?? props.plant.settings.thresholds?.moisture_min ?? 40,
+  moisture_min:
+    props.plant.moistureThreshold ?? props.plant.settings.thresholds?.moisture_min ?? 40,
   moisture_max: props.plant.settings.thresholds?.moisture_max ?? 70,
   temp_min: props.plant.settings.thresholds?.temp_min ?? 18,
   temp_max: props.plant.settings.thresholds?.temp_max ?? 26,
-  light_target: props.plant.settings.thresholds?.light_target ?? 'medium',
-  water_every_days: props.plant.settings.thresholds?.water_every_days ?? 7,
+  air_moisture_min: props.plant.settings.thresholds?.air_moisture_min ?? 40,
+  air_moisture_max: props.plant.settings.thresholds?.air_moisture_max ?? 70,
   auto_water: props.plant.wateringEnabled ?? props.plant.settings.automation.auto_water,
   pump_duration_s:
     props.plant.pumpDurationMs != null
@@ -56,6 +57,10 @@ async function saveSettings() {
     if (plant.settings.thresholds) {
       plant.settings.thresholds.moisture_min = form.moisture_min
       plant.settings.thresholds.moisture_max = form.moisture_max
+      plant.settings.thresholds.temp_min = form.temp_min
+      plant.settings.thresholds.temp_max = form.temp_max
+      plant.settings.thresholds.air_moisture_min = form.air_moisture_min
+      plant.settings.thresholds.air_moisture_max = form.air_moisture_max
     }
 
     message.success('Watering settings saved')
@@ -81,6 +86,14 @@ const tempRange = computed<[number, number]>({
   set: ([min, max]) => {
     form.temp_min = min
     form.temp_max = max
+  },
+})
+
+const airMoistureRange = computed<[number, number]>({
+  get: (): [number, number] => [form.air_moisture_min, form.air_moisture_max],
+  set: ([min, max]) => {
+    form.air_moisture_min = min
+    form.air_moisture_max = max
   },
 })
 
@@ -113,6 +126,7 @@ function makeMarks(
 }
 
 const moistureMarks = makeMarks(0, 100, 25, '%', Water, () => '#3b82f6')
+const airMoistureMarks = makeMarks(0, 100, 25, '%', Water, () => '#14b8a6')
 
 const TEMP_COLORS: Record<number, string> = {
   15: '#2563eb', // deep blue
@@ -138,6 +152,7 @@ const tempGradient = computed(() => {
 
 // Slider fill colors (hex, not CSS vars — naive derives hover/pressed shades).
 const moistureTheme = { fillColor: '#3b82f6', fillColorHover: '#2563eb' }
+const airMoistureTheme = { fillColor: '#14b8a6', fillColorHover: '#0d9488' }
 const tempTheme = { fillColor: '#f97316', fillColorHover: '#ea580c' }
 
 const roomOptions = [
@@ -207,12 +222,16 @@ const imageUrl = computed(
           :style="{ '--temp-gradient': tempGradient }"
         />
       </n-form-item>
-      <n-form-item label="Light target">
-        <n-radio-group v-model:value="form.light_target">
-          <n-radio value="low">Low light</n-radio>
-          <n-radio value="medium">Medium light</n-radio>
-          <n-radio value="high">High light</n-radio>
-        </n-radio-group>
+      <n-form-item label="Air moisture range">
+        <n-slider
+          v-model:value="airMoistureRange"
+          range
+          :min="0"
+          :max="100"
+          :marks="airMoistureMarks"
+          :format-tooltip="formatMoisture"
+          :theme-overrides="airMoistureTheme"
+        />
       </n-form-item>
 
       <n-divider title-placement="left">Watering automation</n-divider>

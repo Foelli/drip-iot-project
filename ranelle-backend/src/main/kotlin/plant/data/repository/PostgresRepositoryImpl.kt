@@ -29,6 +29,13 @@ class PostgresRepositoryImpl: PlantRepository {
                 it[moistureThreshold] = plant.moistureThreshold
                 it[pumpDurationMs] = plant.pumpDurationMs
                 it[waterSettleMs] = plant.waterSettleMs
+                it[idealMoistureMin] = plant.idealMoistureMin
+                it[idealMoistureMax] = plant.idealMoistureMax
+                it[idealTempMin] = plant.idealTempMin
+                it[idealTempMax] = plant.idealTempMax
+                it[idealAirMoistureMin] = plant.idealAirMoistureMin
+                it[idealAirMoistureMax] = plant.idealAirMoistureMax
+                it[careNotes] = plant.careNotes
             }
         }
     }
@@ -66,6 +73,13 @@ class PostgresRepositoryImpl: PlantRepository {
                 it[moistureThreshold] = plant.moistureThreshold
                 it[pumpDurationMs] = plant.pumpDurationMs
                 it[waterSettleMs] = plant.waterSettleMs
+                it[idealMoistureMin] = plant.idealMoistureMin
+                it[idealMoistureMax] = plant.idealMoistureMax
+                it[idealTempMin] = plant.idealTempMin
+                it[idealTempMax] = plant.idealTempMax
+                it[idealAirMoistureMin] = plant.idealAirMoistureMin
+                it[idealAirMoistureMax] = plant.idealAirMoistureMax
+                it[careNotes] = plant.careNotes
             }
         }
         if (updatedRows == 0) {
@@ -107,6 +121,13 @@ class PostgresRepositoryImpl: PlantRepository {
             moistureThreshold = row[PlantsTable.moistureThreshold],
             pumpDurationMs = row[PlantsTable.pumpDurationMs],
             waterSettleMs = row[PlantsTable.waterSettleMs],
+            idealMoistureMin = row[PlantsTable.idealMoistureMin],
+            idealMoistureMax = row[PlantsTable.idealMoistureMax],
+            idealTempMin = row[PlantsTable.idealTempMin],
+            idealTempMax = row[PlantsTable.idealTempMax],
+            idealAirMoistureMin = row[PlantsTable.idealAirMoistureMin],
+            idealAirMoistureMax = row[PlantsTable.idealAirMoistureMax],
+            careNotes = row[PlantsTable.careNotes],
         )
     }
 }

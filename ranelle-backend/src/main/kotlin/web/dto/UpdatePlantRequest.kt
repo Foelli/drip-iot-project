@@ -33,4 +33,11 @@ data class UpdatePlantRequest(
     val moistureThreshold: Int? = null,
     val pumpDurationMs: Int? = null,
     val waterSettleMs: Int? = null,
+    val idealMoistureMin: Int? = null,
+    val idealMoistureMax: Int? = null,
+    val idealTempMin: Int? = null,
+    val idealTempMax: Int? = null,
+    val idealAirMoistureMin: Int? = null,
+    val idealAirMoistureMax: Int? = null,
+    val careNotes: String? = null,
 )

@@ -36,4 +36,11 @@ data class CreatePlantRequest(
     val moistureThreshold: Int = 35,
     val pumpDurationMs: Int = 2000,
     val waterSettleMs: Int = 20000,
+    val idealMoistureMin: Int = 35,
+    val idealMoistureMax: Int = 100,
+    val idealTempMin: Int = 18,
+    val idealTempMax: Int = 30,
+    val idealAirMoistureMin: Int = 40,
+    val idealAirMoistureMax: Int = 70,
+    val careNotes: String? = null,
 )
