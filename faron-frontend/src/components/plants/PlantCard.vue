@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed } from 'vue'
 import { Water } from '@vicons/ionicons5'
 import type { Plant } from '@/types/Plant'
 import { useMessage } from 'naive-ui'
@@ -8,36 +8,11 @@ import { OFFLINE_CONFIG, STATUS_CONFIG } from './plantDisplay'
 const props = defineProps<{ plant: Plant }>()
 const message = useMessage()
 
-const WATER_DURATION_MS = 10_000
 const WATER_COLOR = '#3b82f6'
 
-const isWatering = ref(false)
-const wateringProgress = ref(0)
-let intervalId: ReturnType<typeof setInterval> | null = null
-
 function handleWaterClick() {
-  if (isWatering.value) return
-  message.success(`Watering ${props.plant.custom_name}...`)
-  isWatering.value = true
-  wateringProgress.value = 0
-  const start = performance.now()
-  intervalId = setInterval(() => {
-    const pct = Math.min(100, ((performance.now() - start) / WATER_DURATION_MS) * 100)
-    wateringProgress.value = Math.round(pct)
-    if (pct >= 100) {
-      stopWatering()
-    }
-  }, 100)
+  message.info('Automatic watering is handled by the Pico when moisture falls below the threshold.')
 }
-
-function stopWatering() {
-  if (intervalId) clearInterval(intervalId)
-  intervalId = null
-  isWatering.value = false
-  wateringProgress.value = 0
-}
-
-onBeforeUnmount(stopWatering)
 
 const TEMP_MIN = 0
 const TEMP_MAX = 40
@@ -58,6 +33,14 @@ const temperatureColor = computed(() => {
 const statusDot = computed(() =>
   props.plant.device.online ? STATUS_CONFIG[props.plant.readings.status] : OFFLINE_CONFIG,
 )
+
+const imageUrl = computed(
+  () =>
+    props.plant.photo_url ??
+    props.plant.species.default_image?.regular_url ??
+    props.plant.species.default_image?.medium_url ??
+    '/favicon.ico',
+)
 </script>
 
 <template>
@@ -71,7 +54,7 @@ const statusDot = computed(() =>
   >
     <template #cover>
       <div class="plant-card-cover">
-        <img class="plant-card-cover__img" src="https://picsum.photos/600" alt="Plant image" />
+        <img class="plant-card-cover__img" :src="imageUrl" alt="Plant image" />
         <span
           class="plant-card-status"
           :style="{ background: statusDot.color }"
@@ -94,10 +77,7 @@ const statusDot = computed(() =>
           :border-radius="4"
           :show-indicator="false"
         />
-        <span class="plant-card-moisture__value"
-          ><n-number>{{ plant.readings.moisture }}</n-number
-          >%</span
-        >
+        <span class="plant-card-moisture__value">{{ Math.round(plant.readings.moisture) }}%</span>
       </div>
 
       <div class="plant-card-temperature">
@@ -110,24 +90,13 @@ const statusDot = computed(() =>
           :show-indicator="false"
         />
         <span class="plant-card-temperature__value"
-          ><n-number>{{ plant.readings.temperature }}</n-number
-          >°C</span
+          >{{ Math.round(plant.readings.temperature) }}°C</span
         >
       </div>
     </div>
 
     <template #action>
-      <div v-if="isWatering" class="watering-progress" @click.stop>
-        <n-progress
-          type="line"
-          :percentage="wateringProgress"
-          :color="WATER_COLOR"
-          indicator-placement="inside"
-          processing
-        />
-      </div>
       <n-button
-        v-else
         @click.stop="handleWaterClick"
         size="small"
         secondary
@@ -138,7 +107,7 @@ const statusDot = computed(() =>
         <template #icon>
           <n-icon><Water /></n-icon>
         </template>
-        Water now
+        Auto watering
       </n-button>
     </template>
   </n-card>

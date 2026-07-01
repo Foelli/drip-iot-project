@@ -1,9 +1,12 @@
 package web
 
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpMethod
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.*
 import io.ktor.server.netty.EngineMain
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.server.plugins.cors.routing.CORS
 import kotlinx.coroutines.Dispatchers
 import plant.data.database.DatabaseFactory
 import plant.data.repository.PostgresRepositoryImpl
@@ -25,6 +28,17 @@ fun main(args: Array<String>) {
 
 fun Application.module() {
     DatabaseFactory.init(environment.config)
+
+    install(CORS) {
+        allowHost("localhost:5173")
+        allowHost("127.0.0.1:5173")
+        allowHeader(HttpHeaders.ContentType)
+        allowMethod(HttpMethod.Get)
+        allowMethod(HttpMethod.Post)
+        allowMethod(HttpMethod.Put)
+        allowMethod(HttpMethod.Delete)
+        allowMethod(HttpMethod.Options)
+    }
 
     install(ContentNegotiation) {
         json()

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   Add,
@@ -16,6 +16,7 @@ import {
   saveDiscordSettings,
   sendDiscordMessage,
 } from '@/services/discordNotifications'
+import { API_BASE_URL, api } from '@/api/client'
 
 defineOptions({ name: 'SettingsView' })
 
@@ -125,7 +126,7 @@ watch(
 
 // --- Hub & backend ----------------------------------------------------------
 const hub = reactive({
-  backend_url: 'http://drip.local:8080',
+  backend_url: API_BASE_URL,
   telemetry_interval_s: 60,
 })
 
@@ -139,8 +140,8 @@ const telemetryOptions = [
 
 type ConnStatus = 'connected' | 'pending' | 'disconnected'
 const connection = reactive({
-  status: 'connected' as ConnStatus,
-  last_ping_s: 2,
+  status: 'pending' as ConnStatus,
+  last_ping_s: 0,
 })
 
 const connectionLabel = computed(() => {
@@ -154,13 +155,19 @@ const connectionColor = computed(() => {
   return 'var(--danger)'
 })
 
-function reconnect() {
+async function reconnect() {
   connection.status = 'pending'
-  setTimeout(() => {
+  try {
+    await api.health()
     connection.status = 'connected'
     connection.last_ping_s = 0
-  }, 700)
+  } catch (error) {
+    console.error(error)
+    connection.status = 'disconnected'
+  }
 }
+
+onMounted(reconnect)
 
 // --- Rooms ------------------------------------------------------------------
 interface Room {
