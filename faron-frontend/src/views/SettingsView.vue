@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   Add,
@@ -10,6 +10,13 @@ import {
   RefreshOutline,
   TrashOutline,
 } from '@vicons/ionicons5'
+import {
+  discordIsValidUrl,
+  loadDiscordSettings,
+  saveDiscordSettings,
+  sendDiscordMessage,
+  type MentionMode,
+} from '@/services/discordNotifications'
 
 defineOptions({ name: 'SettingsView' })
 
@@ -67,15 +74,8 @@ const eventToggles: EventToggle[] = [
   { key: 'watering_succeeded', label: 'Watering succeeded', hint: 'Most users mute this.' },
 ]
 
-// --- Discord webhook (mock — backend integration is future work) ------------
-type MentionMode = 'none' | '@here' | '@everyone' | 'role'
-
 const discord = reactive({
-  enabled: false,
-  webhook_url: '',
-  mention_on_critical: 'none' as MentionMode,
-  mention_role_id: '',
-  bot_username: 'DRIP',
+  ...loadDiscordSettings(),
   testing: false,
   last_test: null as null | { ok: boolean; when: string; message: string },
 })
@@ -87,10 +87,6 @@ const mentionOptions: { label: string; value: MentionMode }[] = [
   { label: 'Mention role', value: 'role' },
 ]
 
-// Quick sanity check — Discord webhooks are always under discord.com/api/webhooks/<id>/<token>.
-function discordIsValidUrl(url: string): boolean {
-  return /^https:\/\/(discord|discordapp)\.com\/api\/webhooks\/\d+\/[\w-]+$/.test(url.trim())
-}
 const discordUrlValid = computed(() => discordIsValidUrl(discord.webhook_url))
 const discordUrlInvalid = computed(
   () => discord.webhook_url.length > 0 && !discordUrlValid.value,
@@ -99,21 +95,43 @@ const discordUrlInvalid = computed(
 async function sendDiscordTestPing() {
   if (!discordUrlValid.value) return
   discord.testing = true
-  // Mock POST. Once the backend lands, hit /notifications/discord/test instead
-  // and let it return success/failure based on the real webhook response.
-  await new Promise((r) => setTimeout(r, 900))
   const now = new Date()
-  discord.last_test = {
-    ok: true,
-    when: now.toLocaleTimeString('en-US', {
+  const when = now.toLocaleTimeString('en-US', {
       hour: '2-digit',
       minute: '2-digit',
       hour12: false,
-    }),
-    message: 'Pinged successfully',
+    })
+
+  try {
+    await sendDiscordMessage(discord, 'DRIP test notification: Discord webhook is connected.')
+    discord.last_test = {
+      ok: true,
+      when,
+      message: 'Pinged successfully',
+    }
+  } catch (error) {
+    console.error(error)
+    discord.last_test = {
+      ok: false,
+      when,
+      message: 'Ping failed',
+    }
+  } finally {
+    discord.testing = false
   }
-  discord.testing = false
 }
+
+watch(
+  () => ({
+    enabled: discord.enabled,
+    webhook_url: discord.webhook_url,
+    mention_on_critical: discord.mention_on_critical as MentionMode,
+    mention_role_id: discord.mention_role_id,
+    bot_username: discord.bot_username,
+  }),
+  saveDiscordSettings,
+  { deep: true },
+)
 
 // --- Hub & backend ----------------------------------------------------------
 const hub = reactive({
