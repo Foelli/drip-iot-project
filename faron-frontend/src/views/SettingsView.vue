@@ -15,7 +15,6 @@ import {
   loadDiscordSettings,
   saveDiscordSettings,
   sendDiscordMessage,
-  type MentionMode,
 } from '@/services/discordNotifications'
 
 defineOptions({ name: 'SettingsView' })
@@ -80,13 +79,6 @@ const discord = reactive({
   last_test: null as null | { ok: boolean; when: string; message: string },
 })
 
-const mentionOptions: { label: string; value: MentionMode }[] = [
-  { label: "Don't mention", value: 'none' },
-  { label: '@here', value: '@here' },
-  { label: '@everyone', value: '@everyone' },
-  { label: 'Mention role', value: 'role' },
-]
-
 const discordUrlValid = computed(() => discordIsValidUrl(discord.webhook_url))
 const discordUrlInvalid = computed(
   () => discord.webhook_url.length > 0 && !discordUrlValid.value,
@@ -125,8 +117,6 @@ watch(
   () => ({
     enabled: discord.enabled,
     webhook_url: discord.webhook_url,
-    mention_on_critical: discord.mention_on_critical as MentionMode,
-    mention_role_id: discord.mention_role_id,
     bot_username: discord.bot_username,
   }),
   saveDiscordSettings,
@@ -346,32 +336,6 @@ function goToDevices() {
                 That doesn't look like a Discord webhook URL.
               </span>
             </div>
-          </div>
-
-          <div class="form-row">
-            <label class="form-row__label">Mention on critical</label>
-            <n-select
-              v-model:value="discord.mention_on_critical"
-              :options="mentionOptions"
-              size="small"
-              class="form-row__select"
-              :disabled="!discord.enabled"
-            />
-          </div>
-
-          <div v-if="discord.mention_on_critical === 'role'" class="form-row">
-            <label class="form-row__label">
-              Role ID
-              <span class="form-row__hint">
-                Enable Developer Mode in Discord, right-click the role → Copy ID.
-              </span>
-            </label>
-            <n-input
-              v-model:value="discord.mention_role_id"
-              placeholder="123456789012345678"
-              :disabled="!discord.enabled"
-              class="form-row__input"
-            />
           </div>
 
           <div class="form-row">

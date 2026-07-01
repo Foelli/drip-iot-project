@@ -1,12 +1,8 @@
 import { api, type WateringEvent } from '@/api/client'
 
-export type MentionMode = 'none' | '@here' | '@everyone' | 'role'
-
 export interface DiscordNotificationSettings {
   enabled: boolean
   webhook_url: string
-  mention_on_critical: MentionMode
-  mention_role_id: string
   bot_username: string
 }
 
@@ -17,8 +13,6 @@ export function defaultDiscordSettings(): DiscordNotificationSettings {
   return {
     enabled: false,
     webhook_url: '',
-    mention_on_critical: 'none',
-    mention_role_id: '',
     bot_username: 'DRIP',
   }
 }
