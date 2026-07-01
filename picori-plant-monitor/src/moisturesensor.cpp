@@ -1,52 +1,65 @@
 #include "moisturesensor.h"
+#include "secrets.h"
 #include <Arduino.h>
 
 MoistureSensor::MoistureSensor()
-    : moisturePin(A0), dryValue(0), wetValue(1023) {}
+    : moisturePin(A0), dryRaw(MOISTURE_DRY_RAW), wetRaw(MOISTURE_WET_RAW),
+      lastRawValue(0), calibrationValid(false) {}
 
 void MoistureSensor::init() {
-  Serial.println("Auto-calibrating moisture sensor");
-  Serial.println("Move sensor between air/dry soil and wet soil/water.");
+  pinMode(moisturePin, INPUT);
+
+  calibrationValid = dryRaw != wetRaw;
+
+  Serial.println("Moisture sensor initialized");
+  Serial.print("Dry raw: ");
+  Serial.println(dryRaw);
+  Serial.print("Wet raw: ");
+  Serial.println(wetRaw);
+
+  if (!calibrationValid) {
+    Serial.println("Invalid moisture calibration: dry and wet raw values match.");
+  }
 }
 
 void MoistureSensor::handleEvent(Event event) {}
 
 int MoistureSensor::readMoisturePercent() {
   int raw = analogRead(moisturePin);
+  lastRawValue = raw;
 
-  if (raw > dryValue) {
-    dryValue = raw;
-  }
-
-  if (raw < wetValue) {
-    wetValue = raw;
-  }
-
-  int moisturePercent = 0;
-
-  if (dryValue != wetValue) {
-    moisturePercent = map(raw, dryValue, wetValue, 0, 100);
-    moisturePercent = constrain(moisturePercent, 0, 100);
-
-    float voltage = raw * 3.3 / 1023.0;
-
+  if (!calibrationValid) {
     Serial.println("Moisture sensor");
     Serial.println("----------------");
     Serial.print("Raw:      ");
     Serial.println(raw);
-    Serial.print("Voltage:  ");
-    Serial.print(voltage, 3);
-    Serial.println(" V");
-    Serial.print("Dry:      ");
-    Serial.println(dryValue);
-    Serial.print("Wet:      ");
-    Serial.println(wetValue);
-    Serial.print("Moisture: ");
-    Serial.print(moisturePercent);
-    Serial.println(" %");
+    Serial.println("Moisture: invalid calibration");
     Serial.println();
-
+    return -1;
   }
+
+  int moisturePercent = map(raw, dryRaw, wetRaw, 0, 100);
+  moisturePercent = constrain(moisturePercent, 0, 100);
+
+  float voltage = raw * 3.3 / 1023.0;
+
+  Serial.println("Moisture sensor");
+  Serial.println("----------------");
+  Serial.print("Raw:      ");
+  Serial.println(raw);
+  Serial.print("Voltage:  ");
+  Serial.print(voltage, 3);
+  Serial.println(" V");
+  Serial.print("Dry raw:  ");
+  Serial.println(dryRaw);
+  Serial.print("Wet raw:  ");
+  Serial.println(wetRaw);
+  Serial.print("Moisture: ");
+  Serial.print(moisturePercent);
+  Serial.println(" %");
+  Serial.println();
 
   return moisturePercent;
 }
+
+int MoistureSensor::getLastRawValue() const { return lastRawValue; }

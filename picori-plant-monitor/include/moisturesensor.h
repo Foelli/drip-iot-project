@@ -10,11 +10,14 @@ public:
   void init() override;
   void handleEvent(Event event) override;
   int readMoisturePercent();
+  int getLastRawValue() const;
 
 private:
   int moisturePin;
-  int dryValue;
-  int wetValue;
+  int dryRaw;
+  int wetRaw;
+  int lastRawValue;
+  bool calibrationValid;
 };
 
 #endif // MOISTURESENSOR_H
