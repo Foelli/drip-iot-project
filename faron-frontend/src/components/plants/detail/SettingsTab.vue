@@ -10,39 +10,28 @@ const props = defineProps<{ plant: Plant }>()
 const message = useMessage()
 const saving = ref(false)
 
-// Hardcoded defaults for now — swap to a draft cloned from props.plant later:
-//   const form = reactive(structuredClone(toRaw(props.plant.settings)))
 const DEFAULTS = {
-  // This plant
-  custom_name: 'My Fiddle Leaf Fig',
-  room: 'Living Room',
-  // Care thresholds
-  moisture_min: 40,
-  moisture_max: 70,
-  temp_min: 18,
-  temp_max: 26,
-  light_target: 'medium' as 'low' | 'medium' | 'high',
-  water_every_days: 7,
-  // Automation
-  auto_water: true,
-  pump_duration_s: 8,
-  cooldown_h: 6,
-  quiet_hours_enabled: true,
-  quiet_from: '22:00',
-  quiet_to: '07:00',
-  notifications: false,
-}
-
-const form = reactive({
-  ...DEFAULTS,
-  moisture_min: props.plant.moistureThreshold ?? props.plant.settings.thresholds?.moisture_min ?? DEFAULTS.moisture_min,
-  moisture_max: props.plant.settings.thresholds?.moisture_max ?? DEFAULTS.moisture_max,
+  custom_name: props.plant.custom_name,
+  room: props.plant.room,
+  moisture_min: props.plant.moistureThreshold ?? props.plant.settings.thresholds?.moisture_min ?? 40,
+  moisture_max: props.plant.settings.thresholds?.moisture_max ?? 70,
+  temp_min: props.plant.settings.thresholds?.temp_min ?? 18,
+  temp_max: props.plant.settings.thresholds?.temp_max ?? 26,
+  light_target: props.plant.settings.thresholds?.light_target ?? 'medium',
+  water_every_days: props.plant.settings.thresholds?.water_every_days ?? 7,
   auto_water: props.plant.wateringEnabled ?? props.plant.settings.automation.auto_water,
   pump_duration_s:
     props.plant.pumpDurationMs != null
       ? Math.round(props.plant.pumpDurationMs / 1000)
       : props.plant.settings.automation.pump_duration_s,
-})
+  cooldown_h: props.plant.settings.automation.cooldown_h,
+  quiet_hours_enabled: props.plant.settings.automation.quiet_hours.enabled,
+  quiet_from: props.plant.settings.automation.quiet_hours.from,
+  quiet_to: props.plant.settings.automation.quiet_hours.to,
+  notifications: props.plant.settings.automation.notifications,
+}
+
+const form = reactive({ ...DEFAULTS })
 
 function resetToDefaults() {
   Object.assign(form, DEFAULTS)
@@ -152,10 +141,21 @@ const moistureTheme = { fillColor: '#3b82f6', fillColorHover: '#2563eb' }
 const tempTheme = { fillColor: '#f97316', fillColorHover: '#ea580c' }
 
 const roomOptions = [
+  { label: props.plant.room, value: props.plant.room },
+  { label: 'Unknown', value: 'Unknown' },
   { label: 'Living Room', value: 'Living Room' },
   { label: 'Bedroom', value: 'Bedroom' },
+  { label: 'Kitchen', value: 'Kitchen' },
   { label: 'Office', value: 'Office' },
 ]
+
+const imageUrl = computed(
+  () =>
+    props.plant.photo_url ??
+    props.plant.species.default_image?.regular_url ??
+    props.plant.species.default_image?.medium_url ??
+    '/favicon.ico',
+)
 </script>
 
 <template>
@@ -172,7 +172,7 @@ const roomOptions = [
 
       <n-form-item label="Photo">
         <n-flex align="center" :size="12" :wrap="false">
-          <n-avatar :size="40" src="https://picsum.photos/600" />
+          <n-avatar :size="40" :src="imageUrl" />
           <n-upload :action="null" :show-file-list="false">
             <n-button type="primary">Upload Image</n-button>
           </n-upload>

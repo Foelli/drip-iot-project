@@ -1,11 +1,52 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import { api, type WateringEvent } from '@/api/client'
 import type { Plant } from '@/types/Plant'
 import { LIGHT_CONFIG } from '../plantDisplay'
 
 const props = defineProps<{ plant: Plant }>()
 
 const lightConfig = computed(() => LIGHT_CONFIG[props.plant.readings.light])
+const wateringEvents = ref<WateringEvent[]>([])
+
+const thresholds = computed(() => props.plant.settings.thresholds)
+const latestWateringEvent = computed(() => wateringEvents.value[0] ?? null)
+const lastWateredLabel = computed(() => {
+  if (!latestWateringEvent.value) return 'Never'
+
+  const createdAt = new Date(latestWateringEvent.value.createdAt)
+  const diffMs = Date.now() - createdAt.getTime()
+  const diffMinutes = Math.max(0, Math.round(diffMs / 60000))
+
+  if (diffMinutes < 1) return 'Just now'
+  if (diffMinutes < 60) return `${diffMinutes} min ago`
+
+  const diffHours = Math.round(diffMinutes / 60)
+  if (diffHours < 48) return `${diffHours} h ago`
+
+  return `${Math.round(diffHours / 24)} days ago`
+})
+
+const idealMoisture = computed(() => {
+  if (!thresholds.value) return 'Not set'
+  return `${thresholds.value.moisture_min} - ${thresholds.value.moisture_max} %`
+})
+const idealTemp = computed(() => {
+  if (!thresholds.value) return 'Not set'
+  return `${thresholds.value.temp_min} - ${thresholds.value.temp_max} °C`
+})
+const waterEvery = computed(() => {
+  if (!thresholds.value) return 'Not set'
+  return `~ ${thresholds.value.water_every_days} days`
+})
+const notes = computed(() => props.plant.species.description || props.plant.species.common_name)
+
+async function loadWateringEvents() {
+  wateringEvents.value = await api.getWateringEvents(props.plant.id).catch(() => [])
+}
+
+onMounted(loadWateringEvents)
+watch(() => props.plant.id, loadWateringEvents)
 </script>
 
 <template>
@@ -24,37 +65,30 @@ const lightConfig = computed(() => LIGHT_CONFIG[props.plant.readings.light])
         </template>
         {{ lightConfig.label }}
       </n-statistic>
-      <n-statistic label="Last watered" value="2 days ago" />
+      <n-statistic label="Last watered" :value="lastWateredLabel" />
     </div>
 
     <n-divider title-placement="left">Care info</n-divider>
     <n-descriptions :column="1" label-placement="left" bordered>
-      <n-descriptions-item label="Water every">~ 7 days</n-descriptions-item>
-      <n-descriptions-item label="Ideal moisture">50 – 70 %</n-descriptions-item>
-      <n-descriptions-item label="Ideal temp">18 – 26 °C</n-descriptions-item>
-      <n-descriptions-item label="Light">Bright indirect</n-descriptions-item>
-      <n-descriptions-item label="Notes">Loves humidity, avoid cold drafts.</n-descriptions-item>
+      <n-descriptions-item label="Water every">{{ waterEvery }}</n-descriptions-item>
+      <n-descriptions-item label="Ideal moisture">{{ idealMoisture }}</n-descriptions-item>
+      <n-descriptions-item label="Ideal temp">{{ idealTemp }}</n-descriptions-item>
+      <n-descriptions-item label="Light">{{ lightConfig.label }}</n-descriptions-item>
+      <n-descriptions-item label="Notes">{{ notes }}</n-descriptions-item>
     </n-descriptions>
 
     <div class="section-row">
       <n-divider title-placement="left" class="section-row__divider">Recent activity</n-divider>
       <n-button text size="small">Journal ›</n-button>
     </div>
-    <n-timeline :reverse="true">
-      <n-timeline-item title="Watered" color="#3b82f6" :time="new Date('2024-06-01T10:00:00')">
-        Gave it 500ml of water.
-      </n-timeline-item>
-      <n-timeline-item title="Moved" color="var(--warning)" :time="new Date('2024-05-28T14:30:00')">
-        Relocated to the living room for better light.
-      </n-timeline-item>
-      <n-timeline-item
-        title="Device offline"
-        color="var(--neutral-400)"
-        :time="new Date('2024-05-20T09:15:00')"
-      >
-        The Pico went offline for ~2 hours, likely due to a Wi-Fi issue.
+    <n-timeline v-if="latestWateringEvent" :reverse="true">
+      <n-timeline-item title="Watered" color="#3b82f6" :time="new Date(latestWateringEvent.createdAt)">
+        Pump ran for {{ Math.round(latestWateringEvent.pumpDurationMs / 1000) }} seconds.
+        Moisture before watering:
+        {{ latestWateringEvent.moistureBefore ?? 'unknown' }}%.
       </n-timeline-item>
     </n-timeline>
+    <n-empty v-else description="No watering events yet." size="small" />
   </div>
 </template>
 

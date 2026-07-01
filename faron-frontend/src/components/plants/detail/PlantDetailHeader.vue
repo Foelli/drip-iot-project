@@ -14,13 +14,21 @@ const deviceConfig = computed(() =>
     ? { label: props.plant.device.name, color: 'var(--success)' }
     : { label: 'Offline', color: 'var(--danger)' },
 )
+
+const imageUrl = computed(
+  () =>
+    props.plant.photo_url ??
+    props.plant.species.default_image?.regular_url ??
+    props.plant.species.default_image?.medium_url ??
+    '/favicon.ico',
+)
 </script>
 
 <template>
   <div class="plant-detail-header">
     <n-upload :action="null" :show-file-list="false" class="avatar-upload">
       <div class="avatar-edit" title="Change photo">
-        <n-avatar :size="150" src="https://picsum.photos/600" />
+        <n-avatar :size="150" :src="imageUrl" />
         <span class="avatar-edit__badge">
           <n-icon :size="16"><Camera /></n-icon>
         </span>
