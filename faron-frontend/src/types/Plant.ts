@@ -111,4 +111,8 @@ export interface Plant {
   device: Device
   readings: PlantReadings
   settings: PlantSettings
+  wateringEnabled?: boolean
+  moistureThreshold?: number
+  pumpDurationMs?: number
+  waterSettleMs?: number
 }

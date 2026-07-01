@@ -16,20 +16,21 @@ import kotlinx.serialization.Serializable
  *    and treated as immutable. Omitting the field here makes that rule
  *    enforceable by the type system rather than by handler-level checks.
  *
- *  - All remaining fields are **non-nullable** with no defaults. This encodes
- *    PUT's "full replace" semantics directly in the type: kotlinx.serialization
- *    will reject any request that omits a field with `MissingFieldException`,
- *    so the handler no longer needs per-field null guards. (For partial
- *    updates, introduce a separate `PatchPlantRequest` with nullable fields.)
+ *  - Fields are nullable so sensor clients can update only the measured plant
+ *    state without needing to know descriptive catalog data.
  */
 @Serializable
 data class UpdatePlantRequest(
-    val commonName: String,
-    val scientificName: String,
-    val customName: String,
-    val thumbnailUrl: String,
-    val description: String,
-    val temperature: Int,
-    val moisture: Int,
-    val light: Int,
+    val commonName: String? = null,
+    val scientificName: String? = null,
+    val customName: String? = null,
+    val thumbnailUrl: String? = null,
+    val description: String? = null,
+    val temperature: Int? = null,
+    val moisture: Int? = null,
+    val airMoisture: Int? = null,
+    val wateringEnabled: Boolean? = null,
+    val moistureThreshold: Int? = null,
+    val pumpDurationMs: Int? = null,
+    val waterSettleMs: Int? = null,
 )

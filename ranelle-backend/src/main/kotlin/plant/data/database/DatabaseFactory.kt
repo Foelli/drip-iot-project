@@ -6,6 +6,8 @@ import java.nio.file.Path
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.Database
+import sensor.data.database.MeasurementsTable
+import watering.data.database.WateringEventsTable
 
 object DatabaseFactory {
     fun init(config: ApplicationConfig) {
@@ -35,7 +37,7 @@ object DatabaseFactory {
 
         // Minimal startup schema init for local/dev. Consider Flyway/Liquibase later.
         transaction {
-            SchemaUtils.createMissingTablesAndColumns(PlantsTable)
+            SchemaUtils.createMissingTablesAndColumns(PlantsTable, MeasurementsTable, WateringEventsTable)
         }
     }
 

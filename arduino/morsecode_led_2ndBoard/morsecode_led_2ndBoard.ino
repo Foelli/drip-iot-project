@@ -21,7 +21,8 @@ char password[] = "ehrsfdevtu4cqzp";
 
 int status = WL_IDLE_STATUS;
 WiFiClient wifi;
-HttpClient client(wifi, "10.142.106.28", 8080);
+HttpClient client(wifi, "172.20.10.8", 8080);
+const int plantId = 1;
 
 const int dotTime = 200;
 const int dashTime = 600;
@@ -116,7 +117,8 @@ void loop() {
     //Serial.println("if");
     
     digitalWrite(5,1);
-    client.get("/api/v1/plants/6");
+    String path = "/api/v1/plants/" + String(plantId) + "/measurements/latest";
+    client.get(path);
 
     int statusCode = client.responseStatusCode();
     String response = client.responseBody();
@@ -136,13 +138,28 @@ void loop() {
 
       if (!error) {
 
-        String temperature = doc["temperature"];
-        String moisture = doc["moisture"];
+        int temperature = doc["temperature"] | 0;
+        int soilMoisture = doc["soilMoisture"] | 0;
+        int airMoisture = doc["airMoisture"] | 0;
 
         Serial.println(temperature);
-        Serial.println(moisture);
-        changeLight(temperature.toInt());
-        buzz(moisture.toInt());
+        Serial.println(soilMoisture);
+        Serial.println(airMoisture);
+
+        lcd.clear();
+        lcd.setCursor(0, 0);
+        lcd.print("T:");
+        lcd.print(temperature);
+        lcd.print("C S:");
+        lcd.print(soilMoisture);
+        lcd.print("%");
+        lcd.setCursor(0, 1);
+        lcd.print("Air:");
+        lcd.print(airMoisture);
+        lcd.print("%");
+
+        changeLight(temperature);
+        buzz(soilMoisture);
 
         digitalWrite(6, 0);
         digitalWrite(8, 0);

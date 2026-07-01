@@ -24,7 +24,11 @@ class PostgresRepositoryImpl: PlantRepository {
                 it[description] = plant.description
                 it[temperature] = plant.temperature
                 it[moisture] = plant.moisture
-                it[light] = plant.light
+                it[airMoisture] = plant.airMoisture
+                it[wateringEnabled] = plant.wateringEnabled
+                it[moistureThreshold] = plant.moistureThreshold
+                it[pumpDurationMs] = plant.pumpDurationMs
+                it[waterSettleMs] = plant.waterSettleMs
             }
         }
     }
@@ -55,6 +59,13 @@ class PostgresRepositoryImpl: PlantRepository {
                 it[customName] = plant.customName
                 it[thumbnailUrl] = plant.thumbnailUrl
                 it[description] = plant.description
+                it[temperature] = plant.temperature
+                it[moisture] = plant.moisture
+                it[airMoisture] = plant.airMoisture
+                it[wateringEnabled] = plant.wateringEnabled
+                it[moistureThreshold] = plant.moistureThreshold
+                it[pumpDurationMs] = plant.pumpDurationMs
+                it[waterSettleMs] = plant.waterSettleMs
             }
         }
         if (updatedRows == 0) {
@@ -91,7 +102,11 @@ class PostgresRepositoryImpl: PlantRepository {
             description = row[PlantsTable.description],
             temperature = row[PlantsTable.temperature],
             moisture = row[PlantsTable.moisture],
-            light = row[PlantsTable.light],
+            airMoisture = row[PlantsTable.airMoisture],
+            wateringEnabled = row[PlantsTable.wateringEnabled],
+            moistureThreshold = row[PlantsTable.moistureThreshold],
+            pumpDurationMs = row[PlantsTable.pumpDurationMs],
+            waterSettleMs = row[PlantsTable.waterSettleMs],
         )
     }
 }
