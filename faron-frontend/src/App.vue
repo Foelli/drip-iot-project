@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, onUnmounted } from 'vue'
 import { darkTheme, type GlobalThemeOverrides } from 'naive-ui'
 import AppShell from './layout/AppShell.vue'
 import { useThemeStore } from './stores/theme'
+import { notifyNewWateringEvents } from './services/discordNotifications'
 
 const themeStore = useThemeStore()
 const theme = computed(() => (themeStore.isDark ? darkTheme : null))
@@ -15,6 +16,32 @@ const themeOverrides: GlobalThemeOverrides = {
     primaryColorSuppl: '#22c55e', // accent-500
   },
 }
+
+const WATERING_NOTIFICATION_PLANT_ID = 1
+const WATERING_NOTIFICATION_POLL_MS = 30_000
+let wateringNotificationTimer: number | undefined
+
+async function pollWateringNotifications() {
+  try {
+    await notifyNewWateringEvents(WATERING_NOTIFICATION_PLANT_ID)
+  } catch (error) {
+    console.error('Could not process watering notifications', error)
+  }
+}
+
+onMounted(() => {
+  void pollWateringNotifications()
+  wateringNotificationTimer = window.setInterval(
+    pollWateringNotifications,
+    WATERING_NOTIFICATION_POLL_MS,
+  )
+})
+
+onUnmounted(() => {
+  if (wateringNotificationTimer != null) {
+    window.clearInterval(wateringNotificationTimer)
+  }
+})
 </script>
 
 <template>
