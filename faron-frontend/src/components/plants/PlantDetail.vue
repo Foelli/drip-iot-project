@@ -3,7 +3,6 @@ import type { Plant } from '@/types/Plant'
 import PlantDetailHeader from './detail/PlantDetailHeader.vue'
 import OverviewTab from './detail/OverviewTab.vue'
 import VitalsTab from './detail/VitalsTab.vue'
-import JournalTab from './detail/JournalTab.vue'
 import SettingsTab from './detail/SettingsTab.vue'
 
 defineProps<{ plant: Plant }>()
@@ -19,9 +18,6 @@ defineProps<{ plant: Plant }>()
       </n-tab-pane>
       <n-tab-pane name="vitals" tab="Vitals">
         <VitalsTab :plant="plant" />
-      </n-tab-pane>
-      <n-tab-pane name="journal" tab="Journal">
-        <JournalTab :plant="plant" />
       </n-tab-pane>
       <n-tab-pane name="settings" tab="Settings">
         <SettingsTab :plant="plant" />

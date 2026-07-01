@@ -1,7 +1,5 @@
 export type PlantStatus = 'healthy' | 'needs_attention' | 'critical'
 
-export type PlantLight = 'low' | 'medium' | 'high'
-
 /**
  * Species/catalog data — sourced from the Perenual API.
  * Read-only from the app's perspective, shared across every plant of the
@@ -26,7 +24,6 @@ export interface Species {
   watering: string
   /** numeric benchmark, e.g. { value: "5-7", unit: "days" } */
   watering_general_benchmark: { value: string; unit: string }
-  sunlight: string[]
   soil: string[]
   /** e.g. "Easy" | "Medium" | "Difficult" */
   care_level: string
@@ -58,10 +55,24 @@ export interface PlantReadings {
   moisture: number
   /** ambient temperature in °C */
   temperature: number
-  /** ambient light level — drives the cloud/sunny icon */
-  light: PlantLight
+  /** ambient air moisture / humidity, 0–100 % */
+  air_moisture: number
   /** derived health, drives the status dot/chip */
   status: PlantStatus
+}
+
+/**
+ * Plant care guidance. These values are intended to be generated when a plant
+ * is created and then stored with that plant.
+ */
+export interface CareInfo {
+  ideal_moisture_min: number
+  ideal_moisture_max: number
+  ideal_temp_min: number
+  ideal_temp_max: number
+  ideal_air_moisture_min: number
+  ideal_air_moisture_max: number
+  notes: string
 }
 
 /**
@@ -73,8 +84,8 @@ export interface Thresholds {
   moisture_max: number
   temp_min: number
   temp_max: number
-  light_target: PlantLight
-  water_every_days: number
+  air_moisture_min: number
+  air_moisture_max: number
 }
 
 /**
@@ -111,6 +122,7 @@ export interface Plant {
   device: Device
   readings: PlantReadings
   settings: PlantSettings
+  care_info: CareInfo
   wateringEnabled?: boolean
   moistureThreshold?: number
   pumpDurationMs?: number

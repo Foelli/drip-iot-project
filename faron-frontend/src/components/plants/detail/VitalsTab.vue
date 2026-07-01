@@ -1,11 +1,15 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import { api, type Measurement } from '@/api/client'
 import type { Plant } from '@/types/Plant'
 
 const props = defineProps<{ plant: Plant }>()
 
 type Range = '24h' | '7d' | '30d' | '90d'
 const range = ref<Range>('7d')
+const measurements = ref<Measurement[]>([])
+const loading = ref(false)
+const error = ref<string | null>(null)
 
 const rangeOptions: { label: string; value: Range }[] = [
   { label: '24h', value: '24h' },
@@ -14,82 +18,82 @@ const rangeOptions: { label: string; value: Range }[] = [
   { label: '90d', value: '90d' },
 ]
 
-const POINT_COUNT: Record<Range, number> = { '24h': 24, '7d': 56, '30d': 60, '90d': 90 }
+const RANGE_MS: Record<Range, number> = {
+  '24h': 24 * 60 * 60 * 1000,
+  '7d': 7 * 24 * 60 * 60 * 1000,
+  '30d': 30 * 24 * 60 * 60 * 1000,
+  '90d': 90 * 24 * 60 * 60 * 1000,
+}
 
-// Thresholds — read this plant's settings, fall back if not overridden.
 const thresholds = computed(() => {
   const t = props.plant.settings.thresholds
   return {
-    moisture: { min: t?.moisture_min ?? 40, max: t?.moisture_max ?? 70 },
-    temp: { min: t?.temp_min ?? 18, max: t?.temp_max ?? 26 },
+    moisture: { min: t?.moisture_min ?? 40, max: t?.moisture_max ?? 100 },
+    temp: { min: t?.temp_min ?? 18, max: t?.temp_max ?? 30 },
+    airMoisture: { min: t?.air_moisture_min ?? 40, max: t?.air_moisture_max ?? 70 },
   }
 })
 
-// Mock readings — sinusoidal trend + small noise so charts look natural.
-type Light = 'low' | 'medium' | 'high'
-function makeReadings(n: number) {
-  const out: { moisture: number; temperature: number; light: Light }[] = []
-  let m = 60
-  let tmp = 22
-  for (let i = 0; i < n; i++) {
-    m += Math.sin(i / 4) * 2 + (Math.random() - 0.5) * 4
-    tmp += Math.cos(i / 5) * 0.6 + (Math.random() - 0.5) * 1
-    m = Math.max(20, Math.min(85, m))
-    tmp = Math.max(15, Math.min(30, tmp))
-    const hr = i % 24
-    let light: Light = 'low'
-    if (hr >= 9 && hr < 16) light = 'high'
-    else if ((hr >= 6 && hr < 9) || (hr >= 16 && hr < 19)) light = 'medium'
-    out.push({ moisture: m, temperature: tmp, light })
-  }
-  return out
-}
-
-const readings = computed(() => makeReadings(POINT_COUNT[range.value]))
-
+const rangeStart = computed(() => Date.now() - RANGE_MS[range.value])
+const rangeMeasurements = computed(() =>
+  measurements.value
+    .filter((measurement) => new Date(measurement.measuredAt).getTime() >= rangeStart.value)
+    .sort((a, b) => new Date(a.measuredAt).getTime() - new Date(b.measuredAt).getTime()),
+)
 function stats(values: number[], band: { min: number; max: number }) {
+  if (values.length === 0) return { min: null, max: null, avg: null, inBand: null }
+
   const min = Math.round(Math.min(...values))
   const max = Math.round(Math.max(...values))
-  const avg = Math.round(values.reduce((s, v) => s + v, 0) / values.length)
+  const avg = Math.round(values.reduce((sum, value) => sum + value, 0) / values.length)
   const inBand = Math.round(
-    (values.filter((v) => v >= band.min && v <= band.max).length / values.length) * 100,
+    (values.filter((value) => value >= band.min && value <= band.max).length / values.length) * 100,
   )
+
   return { min, max, avg, inBand }
 }
 
-const moistureStats = computed(() =>
-  stats(
-    readings.value.map((r) => r.moisture),
-    thresholds.value.moisture,
-  ),
-)
-const tempStats = computed(() =>
-  stats(
-    readings.value.map((r) => r.temperature),
-    thresholds.value.temp,
-  ),
+function valuesFor(valueFor: (measurement: Measurement) => number | null): number[] {
+  return rangeMeasurements.value.map(valueFor).filter((value): value is number => value !== null)
+}
+
+const moistureValues = computed(() => valuesFor((measurement) => measurement.soilMoisture))
+const tempValues = computed(() => valuesFor((measurement) => measurement.temperature))
+const airMoistureValues = computed(() => valuesFor((measurement) => measurement.airMoisture))
+
+const moistureStats = computed(() => stats(moistureValues.value, thresholds.value.moisture))
+const tempStats = computed(() => stats(tempValues.value, thresholds.value.temp))
+const airMoistureStats = computed(() =>
+  stats(airMoistureValues.value, thresholds.value.airMoisture),
 )
 
-const lightSummary = computed(() => {
-  const counts = { low: 0, medium: 0, high: 0 }
-  readings.value.forEach((r) => counts[r.light]++)
-  const total = readings.value.length
-  const avgLabel =
-    counts.high > total * 0.4 ? 'Bright' : counts.medium > total * 0.4 ? 'Medium' : 'Low'
-  const brightHours = ((counts.high / total) * 24).toFixed(1)
-  return { avgLabel, brightHours }
-})
-
-// Chart geometry — fixed viewBox, SVG stretches to container width.
 const CHART_W = 600
 const CHART_H = 120
 
-function linePoints(values: number[], dMin: number, dMax: number) {
-  const last = values.length - 1 || 1
-  return values
-    .map((v, i) => {
-      const x = (i / last) * CHART_W
-      const y = CHART_H - ((v - dMin) / (dMax - dMin)) * CHART_H
+function linePoints(
+  readings: Measurement[],
+  valueFor: (measurement: Measurement) => number | null,
+  dMin: number,
+  dMax: number,
+) {
+  const points = readings
+    .map((measurement) => {
+      const value = valueFor(measurement)
+      if (value === null) return null
+      return { time: new Date(measurement.measuredAt).getTime(), value }
+    })
+    .filter((point): point is { time: number; value: number } => point !== null)
+
+  if (points.length === 0) return ''
+
+  const start = rangeStart.value
+  const end = start + RANGE_MS[range.value]
+
+  return points
+    .map((point) => {
+      const x = ((point.time - start) / (end - start)) * CHART_W
+      const clamped = Math.max(dMin, Math.min(dMax, point.value))
+      const y = CHART_H - ((clamped - dMin) / (dMax - dMin)) * CHART_H
       return `${x.toFixed(1)},${y.toFixed(1)}`
     })
     .join(' ')
@@ -102,59 +106,42 @@ function band(low: number, high: number, dMin: number, dMax: number) {
 }
 
 const moistureLine = computed(() =>
-  linePoints(
-    readings.value.map((r) => r.moisture),
-    0,
-    100,
-  ),
+  linePoints(rangeMeasurements.value, (measurement) => measurement.soilMoisture, 0, 100),
 )
 const tempLine = computed(() =>
-  linePoints(
-    readings.value.map((r) => r.temperature),
-    10,
-    35,
-  ),
+  linePoints(rangeMeasurements.value, (measurement) => measurement.temperature, 10, 35),
+)
+const airMoistureLine = computed(() =>
+  linePoints(rangeMeasurements.value, (measurement) => measurement.airMoisture, 0, 100),
 )
 const moistureBand = computed(() =>
   band(thresholds.value.moisture.min, thresholds.value.moisture.max, 0, 100),
 )
 const tempBand = computed(() => band(thresholds.value.temp.min, thresholds.value.temp.max, 10, 35))
+const airMoistureBand = computed(() =>
+  band(thresholds.value.airMoisture.min, thresholds.value.airMoisture.max, 0, 100),
+)
 
-// Watering events plotted on the moisture chart x-axis.
-const wateringMarkers = computed(() => {
-  const n = readings.value.length
-  return [0.15, 0.5, 0.85].map((p) => Math.floor(n * p))
-})
-const xFromIndex = (i: number) => (i / (readings.value.length - 1 || 1)) * CHART_W
-
-// Light stepped bars.
-const LIGHT_HEIGHT: Record<Light, number> = { low: 0.25, medium: 0.6, high: 1 }
-const LIGHT_COLOR: Record<Light, string> = {
-  low: '#94a3b8', // slate — dim
-  medium: '#fbbf24', // amber — partly sunny
-  high: '#f59e0b', // amber-bright — bright
+function formatStat(value: number | null) {
+  return value ?? '-'
 }
-const lightBars = computed(() => {
-  const n = readings.value.length
-  const w = CHART_W / n
-  return readings.value.map((r, i) => {
-    const h = LIGHT_HEIGHT[r.light] * CHART_H
-    return {
-      x: (i / n) * CHART_W,
-      y: CHART_H - h,
-      w: Math.max(1, w - 0.5),
-      h,
-      fill: LIGHT_COLOR[r.light],
-    }
-  })
-})
 
-// Hardcoded watering events for the table.
-const wateringRows = [
-  { time: 'Today 09:14', trigger: 'Auto (38%)', duration: '8 s', delta: '+24 pts' },
-  { time: 'Mon 14:02', trigger: 'Manual', duration: '12 s', delta: '+31 pts' },
-  { time: 'Sat 10:21', trigger: 'Auto (40%)', duration: '8 s', delta: '+28 pts' },
-]
+async function loadVitals() {
+  loading.value = true
+  error.value = null
+
+  try {
+    measurements.value = await api.getMeasurements(props.plant.id)
+  } catch (err) {
+    console.error(err)
+    error.value = 'Could not load plant vitals.'
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(loadVitals)
+watch(() => props.plant.id, loadVitals)
 </script>
 
 <template>
@@ -168,116 +155,116 @@ const wateringRows = [
       </n-radio-group>
     </n-flex>
 
-    <n-divider title-placement="left">Moisture</n-divider>
-    <div class="stat-strip">
-      <n-statistic label="Min" :value="moistureStats.min">
-        <template #suffix>%</template>
-      </n-statistic>
-      <n-statistic label="Avg" :value="moistureStats.avg">
-        <template #suffix>%</template>
-      </n-statistic>
-      <n-statistic label="Max" :value="moistureStats.max">
-        <template #suffix>%</template>
-      </n-statistic>
-      <n-statistic label="In band" :value="moistureStats.inBand">
-        <template #suffix>%</template>
-      </n-statistic>
-    </div>
-    <svg
-      :viewBox="`0 0 ${CHART_W} ${CHART_H + 24}`"
-      class="chart chart--with-events"
-      preserveAspectRatio="none"
-    >
-      <rect
-        x="0"
-        :y="moistureBand.y"
-        :width="CHART_W"
-        :height="moistureBand.h"
-        class="band-moisture"
-      />
-      <polyline
-        :points="moistureLine"
-        fill="none"
-        class="line-moisture"
-        vector-effect="non-scaling-stroke"
-      />
-      <g v-for="i in wateringMarkers" :key="`w-${i}`">
-        <line
-          :x1="xFromIndex(i)"
-          y1="0"
-          :x2="xFromIndex(i)"
-          :y2="CHART_H"
-          class="event-line"
+    <n-alert v-if="error" type="error" :bordered="false">
+      {{ error }}
+    </n-alert>
+
+    <n-spin v-else :show="loading">
+      <n-divider title-placement="left">Moisture</n-divider>
+      <div class="stat-strip">
+        <n-statistic label="Min" :value="formatStat(moistureStats.min)">
+          <template #suffix>%</template>
+        </n-statistic>
+        <n-statistic label="Avg" :value="formatStat(moistureStats.avg)">
+          <template #suffix>%</template>
+        </n-statistic>
+        <n-statistic label="Max" :value="formatStat(moistureStats.max)">
+          <template #suffix>%</template>
+        </n-statistic>
+        <n-statistic label="In band" :value="formatStat(moistureStats.inBand)">
+          <template #suffix>%</template>
+        </n-statistic>
+      </div>
+      <svg
+        v-if="moistureLine"
+        :viewBox="`0 0 ${CHART_W} ${CHART_H}`"
+        class="chart"
+        preserveAspectRatio="none"
+      >
+        <rect
+          x="0"
+          :y="moistureBand.y"
+          :width="CHART_W"
+          :height="moistureBand.h"
+          class="band-moisture"
+        />
+        <polyline
+          :points="moistureLine"
+          fill="none"
+          class="line-moisture"
           vector-effect="non-scaling-stroke"
         />
-        <circle :cx="xFromIndex(i)" :cy="CHART_H + 12" r="4" class="event-drop" />
-      </g>
-    </svg>
+      </svg>
+      <n-empty v-else description="No moisture readings in this range." size="small" />
 
-    <n-divider title-placement="left">Temperature</n-divider>
-    <div class="stat-strip">
-      <n-statistic label="Min" :value="tempStats.min">
-        <template #suffix>°C</template>
-      </n-statistic>
-      <n-statistic label="Avg" :value="tempStats.avg">
-        <template #suffix>°C</template>
-      </n-statistic>
-      <n-statistic label="Max" :value="tempStats.max">
-        <template #suffix>°C</template>
-      </n-statistic>
-      <n-statistic label="In band" :value="tempStats.inBand">
-        <template #suffix>%</template>
-      </n-statistic>
-    </div>
-    <svg :viewBox="`0 0 ${CHART_W} ${CHART_H}`" class="chart" preserveAspectRatio="none">
-      <rect x="0" :y="tempBand.y" :width="CHART_W" :height="tempBand.h" class="band-temp" />
-      <polyline
-        :points="tempLine"
-        fill="none"
-        class="line-temp"
-        vector-effect="non-scaling-stroke"
-      />
-    </svg>
+      <n-divider title-placement="left">Temperature</n-divider>
+      <div class="stat-strip">
+        <n-statistic label="Min" :value="formatStat(tempStats.min)">
+          <template #suffix>°C</template>
+        </n-statistic>
+        <n-statistic label="Avg" :value="formatStat(tempStats.avg)">
+          <template #suffix>°C</template>
+        </n-statistic>
+        <n-statistic label="Max" :value="formatStat(tempStats.max)">
+          <template #suffix>°C</template>
+        </n-statistic>
+        <n-statistic label="In band" :value="formatStat(tempStats.inBand)">
+          <template #suffix>%</template>
+        </n-statistic>
+      </div>
+      <svg
+        v-if="tempLine"
+        :viewBox="`0 0 ${CHART_W} ${CHART_H}`"
+        class="chart"
+        preserveAspectRatio="none"
+      >
+        <rect x="0" :y="tempBand.y" :width="CHART_W" :height="tempBand.h" class="band-temp" />
+        <polyline
+          :points="tempLine"
+          fill="none"
+          class="line-temp"
+          vector-effect="non-scaling-stroke"
+        />
+      </svg>
+      <n-empty v-else description="No temperature readings in this range." size="small" />
 
-    <n-divider title-placement="left">Light</n-divider>
-    <div class="stat-strip stat-strip--2">
-      <n-statistic label="Avg level">{{ lightSummary.avgLabel }}</n-statistic>
-      <n-statistic label="Bright hours / day">{{ lightSummary.brightHours }}</n-statistic>
-    </div>
-    <svg :viewBox="`0 0 ${CHART_W} ${CHART_H}`" class="chart" preserveAspectRatio="none">
-      <rect
-        v-for="(b, idx) in lightBars"
-        :key="idx"
-        :x="b.x"
-        :y="b.y"
-        :width="b.w"
-        :height="b.h"
-        :fill="b.fill"
-      />
-    </svg>
-
-    <div class="section-row">
-      <n-divider title-placement="left" class="section-row__divider">Watering events</n-divider>
-      <n-button text size="small">View all in Journal ›</n-button>
-    </div>
-    <n-table size="small" :single-line="false">
-      <thead>
-        <tr>
-          <th>Time</th>
-          <th>Trigger</th>
-          <th>Duration</th>
-          <th>Δ moisture</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="row in wateringRows" :key="row.time">
-          <td>{{ row.time }}</td>
-          <td>{{ row.trigger }}</td>
-          <td>{{ row.duration }}</td>
-          <td>{{ row.delta }}</td>
-        </tr>
-      </tbody>
-    </n-table>
+      <n-divider title-placement="left">Air moisture</n-divider>
+      <div class="stat-strip">
+        <n-statistic label="Min" :value="formatStat(airMoistureStats.min)">
+          <template #suffix>%</template>
+        </n-statistic>
+        <n-statistic label="Avg" :value="formatStat(airMoistureStats.avg)">
+          <template #suffix>%</template>
+        </n-statistic>
+        <n-statistic label="Max" :value="formatStat(airMoistureStats.max)">
+          <template #suffix>%</template>
+        </n-statistic>
+        <n-statistic label="In band" :value="formatStat(airMoistureStats.inBand)">
+          <template #suffix>%</template>
+        </n-statistic>
+      </div>
+      <svg
+        v-if="airMoistureLine"
+        :viewBox="`0 0 ${CHART_W} ${CHART_H}`"
+        class="chart"
+        preserveAspectRatio="none"
+      >
+        <rect
+          x="0"
+          :y="airMoistureBand.y"
+          :width="CHART_W"
+          :height="airMoistureBand.h"
+          class="band-air-moisture"
+        />
+        <polyline
+          :points="airMoistureLine"
+          fill="none"
+          class="line-air-moisture"
+          vector-effect="non-scaling-stroke"
+        />
+      </svg>
+      <n-empty v-else description="No air moisture readings in this range." size="small" />
+    </n-spin>
   </div>
 </template>
 
@@ -296,9 +283,6 @@ const wateringRows = [
   gap: 0.5rem;
   margin-bottom: 0.5rem;
 }
-.stat-strip--2 {
-  grid-template-columns: repeat(2, 1fr);
-}
 .stat-strip > .n-statistic {
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--color-border-subtle);
@@ -310,10 +294,6 @@ const wateringRows = [
   height: 144px;
   display: block;
 }
-.chart--with-events {
-  height: 172px;
-}
-
 .band-moisture {
   fill: rgba(59, 130, 246, 0.15);
 }
@@ -328,20 +308,11 @@ const wateringRows = [
   stroke: #f97316;
   stroke-width: 1.5;
 }
-.event-line {
-  stroke: rgba(59, 130, 246, 0.35);
-  stroke-dasharray: 2 2;
+.band-air-moisture {
+  fill: rgba(20, 184, 166, 0.15);
 }
-.event-drop {
-  fill: #3b82f6;
-}
-
-.section-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-.section-row__divider {
-  flex: 1;
+.line-air-moisture {
+  stroke: #14b8a6;
+  stroke-width: 1.5;
 }
 </style>

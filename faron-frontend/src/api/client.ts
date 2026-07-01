@@ -29,7 +29,10 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     return undefined as T
   }
 
-  return response.json()
+  const text = await response.text()
+  if (!text) return undefined as T
+
+  return JSON.parse(text)
 }
 
 export interface UpdatePlantWateringSettingsRequest {
@@ -54,6 +57,52 @@ export interface BackendPlant {
   moistureThreshold: number
   pumpDurationMs: number
   waterSettleMs: number
+  idealMoistureMin: number
+  idealMoistureMax: number
+  idealTempMin: number
+  idealTempMax: number
+  idealAirMoistureMin: number
+  idealAirMoistureMax: number
+  careNotes: string | null
+}
+
+export interface CareInfoResponse {
+  idealMoistureMin: number
+  idealMoistureMax: number
+  idealTempMin: number
+  idealTempMax: number
+  idealAirMoistureMin: number
+  idealAirMoistureMax: number
+  careNotes: string
+}
+
+export interface GenerateCareInfoRequest {
+  commonName: string
+  scientificName?: string | null
+  notes?: string | null
+}
+
+export interface CreatePlantRequest {
+  apiId: number
+  commonName?: string | null
+  scientificName?: string | null
+  customName?: string | null
+  thumbnailUrl?: string | null
+  description?: string | null
+  temperature?: number | null
+  moisture?: number | null
+  airMoisture?: number | null
+  wateringEnabled?: boolean
+  moistureThreshold?: number
+  pumpDurationMs?: number
+  waterSettleMs?: number
+  idealMoistureMin?: number
+  idealMoistureMax?: number
+  idealTempMin?: number
+  idealTempMax?: number
+  idealAirMoistureMin?: number
+  idealAirMoistureMax?: number
+  careNotes?: string | null
 }
 
 export interface Measurement {
@@ -77,13 +126,25 @@ export const api = {
   async health() {
     const response = await fetch(`${API_BASE_URL}/health`)
     if (!response.ok) {
-      throw new ApiError(response.status, response.statusText, await response.text().catch(() => null))
+      throw new ApiError(
+        response.status,
+        response.statusText,
+        await response.text().catch(() => null),
+      )
     }
     return response.text()
   },
 
   getPlants() {
     return request<BackendPlant[]>('GET', '/plants')
+  },
+
+  createPlant(body: CreatePlantRequest) {
+    return request<void>('POST', '/plants', body)
+  },
+
+  generatePlantCareInfo(body: GenerateCareInfoRequest) {
+    return request<CareInfoResponse>('POST', '/plants/care-info', body)
   },
 
   getPlant(plantId: number) {

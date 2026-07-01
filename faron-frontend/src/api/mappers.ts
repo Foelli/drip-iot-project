@@ -12,7 +12,12 @@ export function mapBackendPlantToPlant(
 ): Plant {
   const moisture = latestMeasurement?.soilMoisture ?? backendPlant.moisture ?? 0
   const temperature = latestMeasurement?.temperature ?? backendPlant.temperature ?? 0
+  const airMoisture = latestMeasurement?.airMoisture ?? backendPlant.airMoisture ?? 0
   const moistureMax = 100
+  const tempMin = backendPlant.idealTempMin
+  const tempMax = backendPlant.idealTempMax
+  const airMoistureMin = backendPlant.idealAirMoistureMin
+  const airMoistureMax = backendPlant.idealAirMoistureMax
 
   return {
     id: backendPlant.id,
@@ -26,7 +31,6 @@ export function mapBackendPlantToPlant(
       family: null,
       watering: 'Unknown',
       watering_general_benchmark: { value: 'Unknown', unit: 'days' },
-      sunlight: [],
       soil: [],
       care_level: 'Unknown',
       maintenance: 'Unknown',
@@ -42,17 +46,26 @@ export function mapBackendPlantToPlant(
     readings: {
       moisture,
       temperature,
-      light: 'medium',
+      air_moisture: airMoisture,
       status: deriveStatus(moisture, backendPlant.moistureThreshold, moistureMax),
+    },
+    care_info: {
+      ideal_moisture_min: backendPlant.idealMoistureMin,
+      ideal_moisture_max: backendPlant.idealMoistureMax,
+      ideal_temp_min: tempMin,
+      ideal_temp_max: tempMax,
+      ideal_air_moisture_min: airMoistureMin,
+      ideal_air_moisture_max: airMoistureMax,
+      notes: backendPlant.careNotes ?? backendPlant.description ?? '',
     },
     settings: {
       thresholds: {
-        moisture_min: backendPlant.moistureThreshold,
-        moisture_max: moistureMax,
-        temp_min: 18,
-        temp_max: 30,
-        light_target: 'medium',
-        water_every_days: 7,
+        moisture_min: backendPlant.idealMoistureMin,
+        moisture_max: backendPlant.idealMoistureMax,
+        temp_min: tempMin,
+        temp_max: tempMax,
+        air_moisture_min: airMoistureMin,
+        air_moisture_max: airMoistureMax,
       },
       automation: {
         auto_water: backendPlant.wateringEnabled,

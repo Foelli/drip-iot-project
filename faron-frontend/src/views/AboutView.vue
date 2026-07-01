@@ -36,7 +36,7 @@ const tabs: TabGuide[] = [
     name: 'Plants',
     route: '/plants',
     icon: LeafOutline,
-    desc: 'Inventory of every plant. Click a card to open the detail drawer, which has its own sub-tabs: Overview, Vitals, Journal, and Settings.',
+    desc: 'Inventory of every plant. Click a card to open the detail drawer, which has its own sub-tabs: Overview, Vitals, and Settings.',
   },
   {
     name: 'Vitals',
@@ -76,8 +76,8 @@ const features: { title: string; body: string }[] = [
     body: 'Each plant gets a Raspberry Pi Pico W with sensors, pump, and Wi-Fi. The Pi acts as the hub.',
   },
   {
-    title: 'Journal & history',
-    body: 'Every watering, note, and config change is logged so plant behaviour can be reviewed over time.',
+    title: 'Vitals history',
+    body: 'Moisture, temperature, and air moisture readings are stored so plant behaviour can be reviewed over time.',
   },
 ]
 
