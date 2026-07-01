@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { computed, h, reactive } from 'vue'
+import { computed, h, reactive, ref, toRaw } from 'vue'
 import type { Component, VNodeChild } from 'vue'
-import { NFlex, NIcon } from 'naive-ui'
+import { NFlex, NIcon, useMessage } from 'naive-ui'
 import { Thermometer, Water } from '@vicons/ionicons5'
+import { api } from '@/api/client'
 import type { Plant } from '@/types/Plant'
 
-defineProps<{ plant: Plant }>()
+const props = defineProps<{ plant: Plant }>()
+const message = useMessage()
+const saving = ref(false)
 
 // Hardcoded defaults for now — swap to a draft cloned from props.plant later:
 //   const form = reactive(structuredClone(toRaw(props.plant.settings)))
@@ -30,10 +33,49 @@ const DEFAULTS = {
   notifications: false,
 }
 
-const form = reactive({ ...DEFAULTS })
+const form = reactive({
+  ...DEFAULTS,
+  moisture_min: props.plant.moistureThreshold ?? props.plant.settings.thresholds?.moisture_min ?? DEFAULTS.moisture_min,
+  moisture_max: props.plant.settings.thresholds?.moisture_max ?? DEFAULTS.moisture_max,
+  auto_water: props.plant.wateringEnabled ?? props.plant.settings.automation.auto_water,
+  pump_duration_s:
+    props.plant.pumpDurationMs != null
+      ? Math.round(props.plant.pumpDurationMs / 1000)
+      : props.plant.settings.automation.pump_duration_s,
+})
 
 function resetToDefaults() {
   Object.assign(form, DEFAULTS)
+}
+
+async function saveSettings() {
+  saving.value = true
+  try {
+    await api.updatePlantWateringSettings(props.plant.id, {
+      wateringEnabled: form.auto_water,
+      moistureThreshold: form.moisture_min,
+      pumpDurationMs: form.pump_duration_s * 1000,
+      waterSettleMs: props.plant.waterSettleMs ?? 20000,
+    })
+
+    const plant = toRaw(props.plant)
+    plant.wateringEnabled = form.auto_water
+    plant.moistureThreshold = form.moisture_min
+    plant.pumpDurationMs = form.pump_duration_s * 1000
+    plant.settings.automation.auto_water = form.auto_water
+    plant.settings.automation.pump_duration_s = form.pump_duration_s
+    if (plant.settings.thresholds) {
+      plant.settings.thresholds.moisture_min = form.moisture_min
+      plant.settings.thresholds.moisture_max = form.moisture_max
+    }
+
+    message.success('Watering settings saved')
+  } catch (error) {
+    console.error(error)
+    message.error('Could not save watering settings')
+  } finally {
+    saving.value = false
+  }
 }
 
 // Range slider binds to a [min, max] tuple; keep it synced to the two fields.
@@ -172,6 +214,23 @@ const roomOptions = [
           <n-radio value="high">High light</n-radio>
         </n-radio-group>
       </n-form-item>
+
+      <n-divider title-placement="left">Watering automation</n-divider>
+      <n-form-item label="Automatic watering">
+        <n-switch v-model:value="form.auto_water" />
+      </n-form-item>
+      <n-form-item label="Pump pulse duration">
+        <n-input-number
+          v-model:value="form.pump_duration_s"
+          :min="1"
+          :max="30"
+          :step="1"
+          :disabled="!form.auto_water"
+        >
+          <template #suffix>seconds</template>
+        </n-input-number>
+      </n-form-item>
+      <n-button type="primary" :loading="saving" @click="saveSettings">Save settings</n-button>
     </n-form>
   </div>
 </template>
