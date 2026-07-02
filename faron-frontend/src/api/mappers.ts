@@ -1,9 +1,19 @@
 import type { BackendPlant, Measurement } from './client'
 import type { Plant, PlantStatus } from '@/types/Plant'
+import basilikumUrl from '@/assets/basilikum.jpg'
 
 function deriveStatus(moisture: number, min: number, max: number): PlantStatus {
   if (moisture < min || moisture > max) return 'needs_attention'
   return 'healthy'
+}
+
+function plantPhotoUrl(backendPlant: BackendPlant): string | null {
+  const displayName = `${backendPlant.customName ?? ''} ${backendPlant.commonName ?? ''}`.toLowerCase()
+  if (displayName.includes('basilikum') || displayName.includes('basil')) {
+    return basilikumUrl
+  }
+
+  return backendPlant.thumbnailUrl
 }
 
 export function mapBackendPlantToPlant(
@@ -23,7 +33,7 @@ export function mapBackendPlantToPlant(
     id: backendPlant.id,
     custom_name: backendPlant.customName ?? backendPlant.commonName ?? `Plant ${backendPlant.id}`,
     room: 'Unknown',
-    photo_url: backendPlant.thumbnailUrl,
+    photo_url: plantPhotoUrl(backendPlant),
     species: {
       id: backendPlant.apiId,
       common_name: backendPlant.commonName ?? 'Unknown plant',
