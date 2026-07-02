@@ -35,7 +35,8 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   return JSON.parse(text)
 }
 
-export interface UpdatePlantWateringSettingsRequest {
+export interface UpdatePlantSettingsRequest {
+  customName: string
   wateringEnabled: boolean
   moistureThreshold: number
   pumpDurationMs: number
@@ -159,7 +160,7 @@ export const api = {
     return request<Measurement>('GET', `/plants/${plantId}/measurements/latest`)
   },
 
-  updatePlantWateringSettings(plantId: number, body: UpdatePlantWateringSettingsRequest) {
+  updatePlantSettings(plantId: number, body: UpdatePlantSettingsRequest) {
     return request<void>('PUT', `/plants/${plantId}`, body)
   },
 

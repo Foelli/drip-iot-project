@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, h, reactive, ref, toRaw } from 'vue'
+import { computed, h, reactive, ref } from 'vue'
 import type { Component, VNodeChild } from 'vue'
 import { NFlex, NIcon, useMessage } from 'naive-ui'
 import { Thermometer, Water } from '@vicons/ionicons5'
@@ -10,63 +10,73 @@ const props = defineProps<{ plant: Plant }>()
 const message = useMessage()
 const saving = ref(false)
 
-const DEFAULTS = {
-  custom_name: props.plant.custom_name,
-  room: props.plant.room,
-  moisture_min:
-    props.plant.moistureThreshold ?? props.plant.settings.thresholds?.moisture_min ?? 40,
-  moisture_max: props.plant.settings.thresholds?.moisture_max ?? 70,
-  temp_min: props.plant.settings.thresholds?.temp_min ?? 18,
-  temp_max: props.plant.settings.thresholds?.temp_max ?? 26,
-  air_moisture_min: props.plant.settings.thresholds?.air_moisture_min ?? 40,
-  air_moisture_max: props.plant.settings.thresholds?.air_moisture_max ?? 70,
-  auto_water: props.plant.wateringEnabled ?? props.plant.settings.automation.auto_water,
-  pump_duration_s:
-    props.plant.pumpDurationMs != null
-      ? Math.round(props.plant.pumpDurationMs / 1000)
-      : props.plant.settings.automation.pump_duration_s,
-  cooldown_h: props.plant.settings.automation.cooldown_h,
-  quiet_hours_enabled: props.plant.settings.automation.quiet_hours.enabled,
-  quiet_from: props.plant.settings.automation.quiet_hours.from,
-  quiet_to: props.plant.settings.automation.quiet_hours.to,
-  notifications: props.plant.settings.automation.notifications,
+function currentDefaults() {
+  return {
+    custom_name: props.plant.custom_name,
+    room: props.plant.room,
+    moisture_min:
+      props.plant.moistureThreshold ?? props.plant.settings.thresholds?.moisture_min ?? 40,
+    moisture_max: props.plant.settings.thresholds?.moisture_max ?? 70,
+    temp_min: props.plant.settings.thresholds?.temp_min ?? 18,
+    temp_max: props.plant.settings.thresholds?.temp_max ?? 26,
+    air_moisture_min: props.plant.settings.thresholds?.air_moisture_min ?? 40,
+    air_moisture_max: props.plant.settings.thresholds?.air_moisture_max ?? 70,
+    auto_water: props.plant.wateringEnabled ?? props.plant.settings.automation.auto_water,
+    pump_duration_s:
+      props.plant.pumpDurationMs != null
+        ? Math.round(props.plant.pumpDurationMs / 1000)
+        : props.plant.settings.automation.pump_duration_s,
+    cooldown_h: props.plant.settings.automation.cooldown_h,
+    quiet_hours_enabled: props.plant.settings.automation.quiet_hours.enabled,
+    quiet_from: props.plant.settings.automation.quiet_hours.from,
+    quiet_to: props.plant.settings.automation.quiet_hours.to,
+    notifications: props.plant.settings.automation.notifications,
+  }
 }
 
-const form = reactive({ ...DEFAULTS })
+const form = reactive(currentDefaults())
 
 function resetToDefaults() {
-  Object.assign(form, DEFAULTS)
+  Object.assign(form, currentDefaults())
 }
 
 async function saveSettings() {
+  const customName = form.custom_name.trim()
+  if (!customName) {
+    message.warning('Plant name is required')
+    return
+  }
+
   saving.value = true
   try {
-    await api.updatePlantWateringSettings(props.plant.id, {
+    await api.updatePlantSettings(props.plant.id, {
+      customName,
       wateringEnabled: form.auto_water,
       moistureThreshold: form.moisture_min,
       pumpDurationMs: form.pump_duration_s * 1000,
       waterSettleMs: props.plant.waterSettleMs ?? 20000,
     })
 
-    const plant = toRaw(props.plant)
-    plant.wateringEnabled = form.auto_water
-    plant.moistureThreshold = form.moisture_min
-    plant.pumpDurationMs = form.pump_duration_s * 1000
-    plant.settings.automation.auto_water = form.auto_water
-    plant.settings.automation.pump_duration_s = form.pump_duration_s
-    if (plant.settings.thresholds) {
-      plant.settings.thresholds.moisture_min = form.moisture_min
-      plant.settings.thresholds.moisture_max = form.moisture_max
-      plant.settings.thresholds.temp_min = form.temp_min
-      plant.settings.thresholds.temp_max = form.temp_max
-      plant.settings.thresholds.air_moisture_min = form.air_moisture_min
-      plant.settings.thresholds.air_moisture_max = form.air_moisture_max
+    form.custom_name = customName
+    props.plant.custom_name = customName
+    props.plant.wateringEnabled = form.auto_water
+    props.plant.moistureThreshold = form.moisture_min
+    props.plant.pumpDurationMs = form.pump_duration_s * 1000
+    props.plant.settings.automation.auto_water = form.auto_water
+    props.plant.settings.automation.pump_duration_s = form.pump_duration_s
+    if (props.plant.settings.thresholds) {
+      props.plant.settings.thresholds.moisture_min = form.moisture_min
+      props.plant.settings.thresholds.moisture_max = form.moisture_max
+      props.plant.settings.thresholds.temp_min = form.temp_min
+      props.plant.settings.thresholds.temp_max = form.temp_max
+      props.plant.settings.thresholds.air_moisture_min = form.air_moisture_min
+      props.plant.settings.thresholds.air_moisture_max = form.air_moisture_max
     }
 
-    message.success('Watering settings saved')
+    message.success('Plant settings saved')
   } catch (error) {
     console.error(error)
-    message.error('Could not save watering settings')
+    message.error('Could not save plant settings')
   } finally {
     saving.value = false
   }
